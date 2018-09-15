@@ -39,3 +39,11 @@ def savefig_as_np(fig=None, **kwargs):
 def print_environment_vars():
     for envname in ['DATA_DIR', 'TENSORBOARD_DIR']:
         print("{}: {}".format(envname, os.environ.get(envname, '')))
+
+
+def int_as_tuple(x):
+    if type(x) == int:
+        return (x, x)
+    else:
+        return x
+

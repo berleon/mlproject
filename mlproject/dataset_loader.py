@@ -5,35 +5,42 @@ import torch
 
 class DatasetLoader:
     def train_set(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def train_generator(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def test_set(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def test_generator(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def validation_set(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def validation_generator(self):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def has_train_set(self):
         try:
             self.train_set()
             return True
-        except NotImplemented:
+        except NotImplementedError:
+            return False
+
+    def has_test_set(self):
+        try:
+            self.test_set()
+            return True
+        except NotImplementedError:
             return False
 
     def has_validation_set(self):
         try:
             self.validation_set()
             return True
-        except NotImplemented:
+        except NotImplementedError:
             return False
 
 

@@ -1,7 +1,9 @@
 from collections import OrderedDict
 import sacred
 from tqdm import tqdm
-from mlproject.loader import DatasetLoader
+import torch
+
+from mlproject.dataset_loader import DatasetLoader
 from mlproject.model import Model
 from mlproject.log import get_tensorboard_writer, DevNullSummaryWriter, set_global_writer
 from mlproject.utils import to_numpy, print_environment_vars
@@ -11,9 +13,22 @@ class MLProject:
     def __init__(self, _id, config, dataset_loader: DatasetLoader, model: Model,
                  global_step=0, epoch=0):
         self._id = _id
+        self.config = config
+
         self.dataset_loader = dataset_loader
         self.model = model
-        self.config = config
+
+        if 'device' in self.config:
+            device_name = self.config['device']
+        else:
+            if torch.cuda.is_available():
+                device_name = 'cuda:0'
+            else:
+                device_name = 'cpu'
+
+        self.device = torch.device(device_name)
+        self.model.set_device(self.device)
+
         self.global_step = global_step
         self.epoch = epoch
         self.best_score = None
@@ -41,6 +56,7 @@ class MLProject:
             raise Exception()
 
     def test(self):
+        # TODO: seperate validation and test
         self.model.eval()
         test_losses = OrderedDict()
         n_test_samples = len(self.dataset_loader.test_set())
@@ -59,12 +75,15 @@ class MLProject:
 
     def train(self):
         self.model.on_train_begin()
+        self.model.train()
         for epoch_idx in range(self.config['n_train_epochs']):
             self.train_epoch()
-            score = self.test()
-            if self._is_better(score):
-                best_model_fname = self.save()
-                self.best_score = score
+
+            if self.dataset_loader.has_test_set():
+                score = self.test()
+                if self._is_better(score):
+                    best_model_fname = self.save()
+                    self.best_score = score
 
         if best_model_fname:
             if self.experiment is not None:
@@ -76,6 +95,7 @@ class MLProject:
         self.model.on_epoch_begin(self.epoch)
         for batch in progbar:
             losses = self.model.train_batch(batch)
+            # TODO: fix display issue in tensorboard
             self.writer.add_scalars('training', losses, self.global_step)
             self.global_step += 1
         self.model.on_epoch_end(self.epoch)

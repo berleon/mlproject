@@ -26,12 +26,15 @@ class Model(nn.Module):
     def benchmark_metric(self):
         return 'loss'
 
+    def set_device(self, device):
+        self._device = device
+        self.to(self._device)
 
-class TorchModel(Model):
+
+class ClassificationModel(Model):
     def __init__(self, model, optimizer, loss, name):
         super().__init__()
         self.model = model
-        self.device = next(model.parameters()).device
         self.optimizer = optimizer
         self.loss = loss
         self._name = name
@@ -41,8 +44,8 @@ class TorchModel(Model):
 
     def to_device(self, batch):
         input, labels = batch
-        input = input.to(self.device)
-        labels = labels.to(self.device)
+        input = input.to(self._device)
+        labels = labels.to(self._device)
         return input, labels
 
     def train_batch(self, batch):

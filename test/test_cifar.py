@@ -1,7 +1,7 @@
 from mlproject.mlproject import MLProject
 from sacred import Experiment
-from mlproject.loader import CIFARDatasetLoader
-from mlproject.model import TorchModel
+from mlproject.dataset_loader import CIFARDatasetLoader
+from mlproject.model import ClassificationModel
 from mlproject.db import add_mongodb
 
 import torch
@@ -122,7 +122,7 @@ def load_model(**config):
     if torch.cuda.is_available():
         net.cuda()
     opt = torch.optim.Adam(net.parameters())
-    return TorchModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
+    return ClassificationModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
 
 
 # TODO: ensure it works if env TENSORBOARD_DIR, ... are not set.
@@ -133,7 +133,7 @@ def test_cifar():
     ex.add_config({
         'batch_size': 50,
         'n_train_epochs':  1,
-        'tensorboard': True,
+        'tensorboard': False,
     })
 
     add_mongodb(ex)
