@@ -13,7 +13,7 @@ class ClutteredMNIST:
 
     def generate_parameters(self):
         all_params = []
-        h, w = self.dataset[0][0].shape
+        h, w = np.array(self.dataset[0][0]).shape
         for i in range(self.n_samples):
             params = {
                 'idx': i % len(self.dataset),
@@ -21,7 +21,7 @@ class ClutteredMNIST:
                 'digit_w': np.random.randint(0, self.shape[1] - w),
             }
             clutter = []
-            for _ in self.n_clutters:
+            for _ in range(self.n_clutters):
                 clutter_idx = np.random.randint(0, len(self.dataset))
                 cs = self.clutter_size
                 ph = np.random.randint(0, h - cs)
