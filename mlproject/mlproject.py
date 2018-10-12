@@ -33,9 +33,11 @@ class MLProject:
                  model_save_dir=None,
                  tensorboard_log_dir=None,
                  model_state=None,
+                 _run=None,
                  ):
         self._id = _id or random.randint(int(1e10), int(1e10) + int(1e8))
         self.config = config
+        self._run = _run
         self.dataset_loader = self.get_dataset_loader(self.config)
         self.model = self.get_model(self.config)
         if model_state:
@@ -78,12 +80,14 @@ class MLProject:
         sacred.commands.print_config(_run)
         print_environment_vars()
         cfg = _run.config
-        return cls(_run._id, cfg)
+        return cls(_run._id, cfg, _run=_run)
 
-    def get_model(self, config):
+    @staticmethod
+    def get_model(config):
         raise NotImplementedError()
 
-    def get_dataset_loader(self, config):
+    @staticmethod
+    def get_dataset_loader(config):
         raise NotImplementedError()
 
     def _is_better(self, score):
@@ -128,8 +132,8 @@ class MLProject:
             self.epoch += 1
 
         if best_model_fname is not None:
-            if self.experiment is not None:
-                self.experiment.add_artifact(best_model_fname)
+            if self._run is not None:
+                self._run.add_artifact(best_model_fname)
         self.model.on_train_end()
 
     def train_epoch(self):

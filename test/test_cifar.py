@@ -116,16 +116,31 @@ def dataloader(**config):
             Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]))
 
 
-def load_model(**config):
-    print("loading resnet")
-    net = ResNet18()
-    if torch.cuda.is_available():
-        net.cuda()
-    opt = torch.optim.Adam(net.parameters())
-    return ClassificationModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
-
-
 # TODO: ensure it works if env TENSORBOARD_DIR, ... are not set.
+
+
+class CifarProject(MLProject):
+    @staticmethod
+    def get_dataset_loader(config):
+        return CIFARDatasetLoader(
+            config['batch_size'],
+            train_transform=Compose([
+                RandomCrop(32, padding=4),
+                RandomHorizontalFlip(),
+                ToTensor(),
+                Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]),
+            test_transform=Compose([
+                ToTensor(),
+                Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]))
+
+    @staticmethod
+    def get_model(config):
+        print("loading resnet")
+        net = ResNet18()
+        if torch.cuda.is_available():
+            net.cuda()
+        opt = torch.optim.Adam(net.parameters())
+        return ClassificationModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
 
 
 def test_cifar():
@@ -136,13 +151,12 @@ def test_cifar():
         'tensorboard': False,
     })
 
-    add_mongodb(ex)
 
     @ex.automain
     def main(_run):
-        proj = MLProject.from_run(_run, dataloader, load_model)
+        proj = CifarProject.from_run(_run)
         proj.test()
-        proj.train()
+        proj.tk()
         proj.test()
 
     ex.run()
