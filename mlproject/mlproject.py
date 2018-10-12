@@ -1,22 +1,45 @@
+import os
 from collections import OrderedDict
 import sacred
 from tqdm import tqdm
 import torch
+import random
+from tensorboardX import SummaryWriter
 
 from mlproject.dataset_loader import DatasetLoader
 from mlproject.model import Model
-from mlproject.log import get_tensorboard_writer, DevNullSummaryWriter, set_global_writer
+from mlproject.log import get_tensorboard_dir, DevNullSummaryWriter, set_global_writer
 from mlproject.utils import to_numpy, print_environment_vars
 
 
-class MLProject:
-    def __init__(self, _id, config, dataset_loader: DatasetLoader, model: Model,
-                 global_step=0, epoch=0):
-        self._id = _id
-        self.config = config
+def get_model_dir(config, model_identifier):
+    if "model_dir" in config:
+        model_dir = config['model_dir']
+    elif 'MODEL_DIR' in os.environ:
+        model_dir = os.environ['MODEL_DIR']
+    else:
+        raise Exception("Cannot figure out model dir.")
+    return os.path.join(model_dir, model_identifier)
 
-        self.dataset_loader = dataset_loader
-        self.model = model
+
+class MLProject:
+    def __init__(self,
+                 _id,
+                 config,
+                 global_step=0,
+                 epoch=0,
+                 epoch_step=0,
+                 best_score=0,
+                 model_save_dir=None,
+                 tensorboard_log_dir=None,
+                 model_state=None,
+                 ):
+        self._id = _id or random.randint(int(1e10), int(1e10) + int(1e8))
+        self.config = config
+        self.dataset_loader = self.get_dataset_loader(self.config)
+        self.model = self.get_model(self.config)
+        if model_state:
+            self.model.load_state_dict(model_state)
 
         if 'device' in self.config:
             device_name = self.config['device']
@@ -31,19 +54,37 @@ class MLProject:
 
         self.global_step = global_step
         self.epoch = epoch
+        self.epoch_step = epoch_step
         self.best_score = None
-        if self.config.get('tensorboard', False):
-            self.writer = get_tensorboard_writer(str(_id) + '_' + self.model.name())
+        if tensorboard_log_dir is None and self.config.get('tensorboard', False):
+            self.tensorboard_log_dir = get_tensorboard_dir(
+                str(self._id) + '_' + self.model.name())
         else:
+            self.tensorboard_log_dir = tensorboard_log_dir
+        if self.tensorboard_log_dir is None:
             self.writer = DevNullSummaryWriter()
+        else:
+            self.writer = SummaryWriter(self.tensorboard_log_dir)
+        if model_save_dir is None:
+            self.model_save_dir = get_model_dir(self.config,
+                                                str(self._id) + '_' + self.model.name())
+            os.makedirs(self.model_save_dir)
+        else:
+            self.model_save_dir = model_save_dir
         set_global_writer(self.writer)
 
-    @staticmethod
-    def from_run(_run: sacred.run.Run, dataset_loader, model_loader):
+    @classmethod
+    def from_run(cls, _run: sacred.run.Run):
         sacred.commands.print_config(_run)
         print_environment_vars()
         cfg = _run.config
-        return MLProject(_run._id, cfg, dataset_loader(**cfg), model_loader(**cfg))
+        return cls(_run._id, cfg)
+
+    def get_model(self, config):
+        raise NotImplementedError()
+
+    def get_dataset_loader(self, config):
+        raise NotImplementedError()
 
     def _is_better(self, score):
         if self.best_score is None:
@@ -76,16 +117,17 @@ class MLProject:
     def train(self):
         self.model.on_train_begin()
         self.model.train()
+        best_model_fname = None
         for epoch_idx in range(self.config['n_train_epochs']):
             self.train_epoch()
-
             if self.dataset_loader.has_test_set():
                 score = self.test()
                 if self._is_better(score):
                     best_model_fname = self.save()
                     self.best_score = score
+            self.epoch += 1
 
-        if best_model_fname:
+        if best_model_fname is not None:
             if self.experiment is not None:
                 self.experiment.add_artifact(best_model_fname)
         self.model.on_train_end()
@@ -93,14 +135,38 @@ class MLProject:
     def train_epoch(self):
         progbar = tqdm(self.dataset_loader.train_generator())
         self.model.on_epoch_begin(self.epoch)
+        self.epoch_step = 0
         for batch in progbar:
             losses = self.model.train_batch(batch)
             # TODO: fix display issue in tensorboard
             self.writer.add_scalars('training', losses, self.global_step)
             self.global_step += 1
+            self.epoch_step += 1
         self.model.on_epoch_end(self.epoch)
         self.epoch += 1
 
+    def state_dict(self):
+        return {
+            '_id': self._id,
+            'config': self.config,
+            'global_step': self.global_step,
+            'epoch': self.epoch,
+            'epoch_step': self.epoch_step,
+            'best_score': self.best_score,
+            'model_save_dir': self.model_save_dir,
+            'tensorboard_log_dir': self.tensorboard_log_dir,
+            'model_state': self.model.state_dict(),
+        }
+
+    def save_filename(self):
+        return os.path.join(
+            self.model_save_dir,
+            "{}_e{:05}_b{:05}.torch".format(self.model.name(), self.epoch, self.epoch_step))
+
     def save(self):
-        # TODO: save project state
-        pass
+        torch.save(self.state_dict(), self.save_filename())
+        return self.save_filename()
+
+    @classmethod
+    def load(cls, filename):
+        return cls(**torch.load(filename))

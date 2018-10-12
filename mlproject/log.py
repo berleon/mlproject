@@ -1,16 +1,14 @@
-from tensorboardX import SummaryWriter
 import os
 
 
-def get_tensorboard_writer(model_prefix, tensorboard_dir=None):
+def get_tensorboard_dir(model_prefix, tensorboard_dir=None):
     if tensorboard_dir is None:
         if 'TENSORBOARD_DIR' in os.environ:
             tensorboard_dir = os.environ['TENSORBOARD_DIR']
         else:
             raise ValueError("No path for tensorboard_dir given and "
                              "TENSORBOARD_DIR enviroment variable is also not set.")
-    tensorboard_path = os.path.join(tensorboard_dir, model_prefix)
-    return SummaryWriter(tensorboard_path)
+    return os.path.join(tensorboard_dir, model_prefix)
 
 
 class DevNullSummaryWriter:

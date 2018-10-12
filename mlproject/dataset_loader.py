@@ -32,6 +32,10 @@ class DatasetLoader:
     def has_validation_set(self):
         return self.validation_set() is not None
 
+    # TODO: implement state_dict for subclasses
+    def state_dict(self):
+        return {}
+
 
 def default_data_dir(maybe_data_dir=None):
     if maybe_data_dir is not None:
