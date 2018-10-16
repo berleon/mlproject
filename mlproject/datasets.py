@@ -3,17 +3,19 @@ from PIL import Image
 
 
 class ClutteredMNIST:
-    def __init__(self, dataset, shape=(100, 100), n_clutters=6, clutter_size=8, n_samples=60000):
+    def __init__(self, dataset, shape=(100, 100), n_clutters=6, clutter_size=8,
+                 n_samples=60000, transform=None):
         self.dataset = dataset
         self.shape = shape
         self.n_clutters = n_clutters
         self.clutter_size = clutter_size
         self.n_samples = n_samples
+        self.transform = transform
         self.parameters = self.generate_parameters()
 
     def generate_parameters(self):
         all_params = []
-        h, w = np.array(self.dataset[0][0]).shape
+        h, w = self.dataset[0][0].size
         for i in range(self.n_samples):
             params = {
                 'idx': i % len(self.dataset),
@@ -39,6 +41,9 @@ class ClutteredMNIST:
             all_params.append(params)
         return all_params
 
+    def __len__(self):
+        return self.n_samples
+
     def __getitem__(self, idx):
         canvas = np.zeros(self.shape, dtype=np.uint8)
         params = self.parameters[idx]
@@ -61,4 +66,8 @@ class ClutteredMNIST:
         dh = params['digit_h']
         dw = params['digit_w']
         canvas[dh:dh+h, dw:dw+w] = img
-        return Image.fromarray(canvas, mode='L'), label
+        pil_img = Image.fromarray(canvas, mode='L')
+        if self.transform is not None:
+            return self.transform(pil_img), label
+        else:
+            return pil_img, label

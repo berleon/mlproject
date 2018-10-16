@@ -1,6 +1,7 @@
 import numpy as np
 from mlproject.dataset_loader import CIFARDatasetLoader, MNISTDatasetLoader, \
     ClutteredMNISTDatasetLoader
+from torchvision.transforms import ToTensor
 
 
 def test_cifar_data_loader():
@@ -24,10 +25,20 @@ def test_mnist_data_loader():
 
 
 def test_cluttered_mnist_data_loader():
-    cluttered_mnist = ClutteredMNISTDatasetLoader(shape=(100, 100), n_samples=100)
+    cluttered_mnist = ClutteredMNISTDatasetLoader(
+        shape=(100, 100),
+        n_samples=100,
+        batch_size=33,
+        train_transform=ToTensor(),
+        test_transform=ToTensor(),
+    )
     assert cluttered_mnist.has_train_set()
     assert cluttered_mnist.has_test_set()
     assert not cluttered_mnist.has_validation_set()
 
     img, label = cluttered_mnist.train_set()[0]
-    assert np.array(img).shape == (100, 100)
+    assert np.array(img).shape == (1, 100, 100)
+
+    imgs, labels = next(iter(cluttered_mnist.train_generator()))
+    assert np.array(imgs).shape == (33, 1, 100, 100)
+    assert np.array(labels).shape == (33,)
