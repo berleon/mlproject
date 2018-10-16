@@ -138,7 +138,7 @@ class CifarProject(MLProject):
         print("loading resnet")
         net = ResNet18()
         if torch.cuda.is_available():
-            net.cuda()
+            net.to("cuda:0")  # cuda()
         opt = torch.optim.Adam(net.parameters())
         return ClassificationModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
 
@@ -146,7 +146,7 @@ class CifarProject(MLProject):
 def test_cifar():
     ex = Experiment()
     ex.add_config({
-        'batch_size': 50,
+        'batch_size': 5,
         'n_train_epochs':  1,
         'tensorboard': False,
     })
@@ -156,7 +156,7 @@ def test_cifar():
     def main(_run):
         proj = CifarProject.from_run(_run)
         proj.test()
-        proj.tk()
+        proj.train()
         proj.test()
 
     ex.run()

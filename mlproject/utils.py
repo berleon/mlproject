@@ -6,7 +6,7 @@ from PIL import Image
 import copy
 
 
-def get_optimizer(config):
+def get_optimizer(config, parameters):
     """
     Loads optimizer from config dict.
     `name`: optimizer name, e.g. Adam, SGD, ...
@@ -14,7 +14,7 @@ def get_optimizer(config):
     opt_cls = getattr(torch.optim, config['name'])
     kwargs = copy.copy(config)
     del kwargs['name']
-    return opt_cls(**kwargs)
+    return opt_cls(params=parameters, **kwargs)
 
 
 def to_numpy(x):
@@ -63,3 +63,15 @@ def int_as_tuple(x):
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
     __getattr__ = dict.get
+
+
+class GeneratorWithLenght:
+    def __init__(self, gen, length):
+        self.gen = gen
+        self.length = length
+
+    def __len__(self):
+        return self.length
+
+    def __iter__(self):
+        return self.gen

@@ -50,7 +50,7 @@ class MLProject:
                 device_name = 'cpu'
 
         self.device = torch.device(device_name)
-        self.model.set_device(self.device)
+        self.model.to(self.device)
 
         self.global_step = global_step
         self.epoch = epoch

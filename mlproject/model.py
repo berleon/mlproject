@@ -3,6 +3,7 @@ from torch import nn
 
 class Model(nn.Module):
     def __init__(self, device='cpu'):
+        super().__init__()
         self._device_args = [device]
         self._device_kwargs = {}
 
