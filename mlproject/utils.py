@@ -3,6 +3,18 @@ import numpy as np
 import io
 import os
 from PIL import Image
+import copy
+
+
+def get_optimizer(config):
+    """
+    Loads optimizer from config dict.
+    `name`: optimizer name, e.g. Adam, SGD, ...
+    """
+    opt_cls = getattr(torch.optim, config['name'])
+    kwargs = copy.copy(config)
+    del kwargs['name']
+    return opt_cls(**kwargs)
 
 
 def to_numpy(x):
@@ -47,3 +59,7 @@ def int_as_tuple(x):
     else:
         return x
 
+
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
