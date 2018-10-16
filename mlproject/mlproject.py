@@ -6,8 +6,6 @@ import torch
 import random
 from tensorboardX import SummaryWriter
 
-from mlproject.dataset_loader import DatasetLoader
-from mlproject.model import Model
 from mlproject.log import get_tensorboard_dir, DevNullSummaryWriter, set_global_writer
 from mlproject.utils import to_numpy, print_environment_vars
 

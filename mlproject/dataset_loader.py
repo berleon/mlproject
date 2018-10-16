@@ -5,23 +5,34 @@ from mlproject.datasets import ClutteredMNIST
 
 
 class DatasetLoader:
+    def __init__(self,
+                 train_set=None, train_generator=None,
+                 test_set=None, test_generator=None,
+                 validation_set=None, validation_generator=None):
+        self._train_set = train_set
+        self._train_generator = train_generator
+        self._test_set = test_set
+        self._test_generator = test_generator
+        self._validation_set = validation_set
+        self._validation_generator = validation_generator
+
     def train_set(self):
-        pass
+        return self._train_set
 
     def train_generator(self):
-        pass
+        return self._train_generator
 
     def test_set(self):
-        pass
+        return self._test_set
 
     def test_generator(self):
-        pass
+        return self._train_generator
 
     def validation_set(self):
-        pass
+        return self._validation_set
 
     def validation_generator(self):
-        pass
+        return self._validation_generator
 
     def has_train_set(self):
         return self.train_set() is not None
@@ -32,7 +43,7 @@ class DatasetLoader:
     def has_validation_set(self):
         return self.validation_set() is not None
 
-    # TODO: implement state_dict for subclasses
+    # TODO: implement state_dict for subclasses. Really needed?
     def state_dict(self):
         return {}
 
