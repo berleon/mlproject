@@ -60,6 +60,7 @@ def default_data_dir(maybe_data_dir=None):
 
 
 class TorchvisionDatasetLoader(DatasetLoader):
+    # TODO: Extract more code from subclass
     def __init__(self, train_set=None, test_set=None, validation_set=None,
                  data_loader_kwargs={},
                  data_loader_train_kwargs={},
@@ -106,6 +107,38 @@ class CIFARDatasetLoader(TorchvisionDatasetLoader):
                 'batch_size': batch_size,
             },
             data_loader_train_kwargs={'shuffle': True}
+        )
+
+
+class FashionMNISTDatasetLoader(TorchvisionDatasetLoader):
+    def __init__(self, batch_size=1, train_transform=None, test_transform=None, data_dir=None,
+                 num_workers=0, collate_fn=None, pin_memory=None, drop_last=None,
+                 data_loader_train_kwargs=None,
+                 data_loader_test_kwargs=None,
+                 ):
+        def update_kwargs(kwargs):
+            kwargs = copy.copy(kwargs or {})
+            if 'num_workers' not in kwargs:
+                kwargs['num_workers'] = num_workers
+            if 'collate_fn' not in kwargs and collate_fn is not None:
+                kwargs['collate_fn'] = collate_fn
+            if 'pin_memory' not in kwargs and pin_memory is not None:
+                kwargs['pin_memory'] = pin_memory
+            if 'drop_last' not in kwargs and drop_last is not None:
+                kwargs['drop_last'] = drop_last
+            if 'batch_size' not in kwargs:
+                kwargs['batch_size'] = batch_size
+            return kwargs
+
+        self.data_dir = default_data_dir(data_dir)
+        trainset = torchvision.datasets.FashionMNIST(root=self.data_dir, train=True,
+                                                     download=True, transform=train_transform)
+        testset = torchvision.datasets.FashionMNIST(root=self.data_dir, train=False,
+                                                    download=True, transform=test_transform)
+        super().__init__(
+            trainset, testset,
+            data_loader_train_kwargs=update_kwargs(data_loader_train_kwargs),
+            data_loader_test_kwargs=update_kwargs(data_loader_test_kwargs)
         )
 
 
