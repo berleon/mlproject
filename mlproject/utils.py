@@ -5,6 +5,9 @@ import os
 from PIL import Image
 import copy
 
+import pickle
+import struct
+
 
 def get_optimizer(config, parameters):
     """
@@ -75,3 +78,49 @@ class GeneratorWithLenght:
 
     def __iter__(self):
         return self.gen
+
+
+# https://stackoverflow.com/questions/5580201/seek-into-a-file-full-of-pickled-objects
+
+
+class IndexedPickleReader:
+    def __init__(self, filename):
+        self.filename = filename
+
+    def __enter__(self):
+        self.f = open(self.filename, 'r+b')
+        loc, = struct.unpack('L', self.f.read(8))
+        self.f.seek(loc)
+        self.indicies = pickle.load(self.f)
+        return self
+
+    def __exit__(self, *args):
+        self.f.close()
+
+    def __getitem__(self, idx):
+        loc = self.indicies[idx]
+        self.f.seek(loc)
+        return pickle.load(self.f)
+
+
+class IndexedPickleWriter:
+    def __init__(self, filename):
+        self.filename = filename
+
+    def __enter__(self):
+        self.f = open(self.filename, 'w+b')
+        self.f.write(struct.pack('L', 0))
+        self.indicies = []
+        return self
+
+    def __exit__(self, *args):
+        loc = self.f.tell()
+        pickle.dump(self.indicies, self.f)
+        self.f.seek(0)
+        self.f.write(struct.pack('L', loc))
+        self.f.close()
+
+    def dump(self, obj):
+        assert hasattr(self, 'f')
+        self.indicies.append(self.f.tell())
+        pickle.dump(obj, self.f)
