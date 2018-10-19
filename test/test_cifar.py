@@ -1,8 +1,7 @@
 from mlproject.mlproject import MLProject
 from sacred import Experiment
-from mlproject.dataset_loader import CIFARDatasetLoader
+from mlproject.dataset_factory import CIFARDatasetFactory
 from mlproject.model import ClassificationModel
-from mlproject.db import add_mongodb
 
 import torch
 import torch.nn as nn
@@ -104,7 +103,7 @@ def ResNet18():
 
 
 def dataloader(**config):
-    return CIFARDatasetLoader(
+    return CIFARDatasetFactory(
         config['batch_size'],
         train_transform=Compose([
             RandomCrop(32, padding=4),
@@ -121,8 +120,8 @@ def dataloader(**config):
 
 class CifarProject(MLProject):
     @staticmethod
-    def get_dataset_loader(config):
-        return CIFARDatasetLoader(
+    def get_dataset_factory(config):
+        return CIFARDatasetFactory(
             config['batch_size'],
             train_transform=Compose([
                 RandomCrop(32, padding=4),
@@ -135,10 +134,9 @@ class CifarProject(MLProject):
 
     @staticmethod
     def get_model(config):
-        print("loading resnet")
         net = ResNet18()
         if torch.cuda.is_available():
-            net.to("cuda:0")  # cuda()
+            net.to("cuda:0")
         opt = torch.optim.Adam(net.parameters())
         return ClassificationModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
 
@@ -150,7 +148,6 @@ def test_cifar():
         'n_train_epochs':  1,
         'tensorboard': False,
     })
-
 
     @ex.automain
     def main(_run):

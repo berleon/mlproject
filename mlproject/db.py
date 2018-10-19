@@ -39,6 +39,7 @@ def load_weights(model, artifact_filename, mode='eval'):
 
 
 def get_db(database_name='sacred'):
+    warnings.warn("This code needs some cleanup. Tell me before you want to use it.")
     client = MongoClient(host=get_mongodb_ip())
     db = client.get_database(database_name)
     return db, gridfs.GridFS(db)
@@ -85,12 +86,12 @@ def weight_files(db_entry):
 
 
 def load_model(db_entry):
+    raise Exception()
     if type(db_entry) == int:
         db_entry = load_entry(db_entry)
-    # TODO:
-    data_loader = get_dataset_loader(db_entry['config']['dataset'])
-    model = data_loader.load_model(**db_entry['config']['model'])
-    model.eval()
+
+    # TODO: fix this
+    #
     iteration, latest_weight = weight_files(db_entry)[-1]
     load_weights_from_db(model, latest_weight['file_id'])
     return model

@@ -8,6 +8,7 @@ from tensorboardX import SummaryWriter
 
 from mlproject.log import get_tensorboard_dir, DevNullSummaryWriter, set_global_writer
 from mlproject.utils import to_numpy, print_environment_vars
+from mlproject.dataset_factory import DatasetFactory
 
 
 def get_model_dir(config, model_identifier):
@@ -36,7 +37,7 @@ class MLProject:
         self._id = _id or random.randint(int(1e10), int(1e10) + int(1e8))
         self.config = config
         self._run = _run
-        self.dataset_loader = self.get_dataset_loader(self.config)
+        self.dataset_factory = self.get_dataset_factory(self.config)
         self.model = self.get_model(self.config)
         if model_state:
             self.model.load_state_dict(model_state)
@@ -82,16 +83,22 @@ class MLProject:
 
     @staticmethod
     def get_model(config):
+        """
+        Build a `mlproject.Model` for the given config.
+        """
         raise NotImplementedError()
 
     @staticmethod
-    def get_dataset_loader(config):
+    def get_dataset_factory(config) -> DatasetFactory:
+        """
+        Returns a DatasetFactory from the given config.
+        """
         raise NotImplementedError()
 
     def _is_better(self, score):
         if self.best_score is None:
             return True
-        elif self.model.benchmark_metric() == 'accuracy':
+        elif self.model.benchmark_metric() in ['accuracy', 'loss']:
             return self.best_score < score
         elif self.model.benchmark_metric() == 'nll':
             return self.best_score > score
@@ -102,8 +109,8 @@ class MLProject:
         # TODO: seperate validation and test
         self.model.eval()
         test_losses = OrderedDict()
-        n_test_samples = len(self.dataset_loader.test_set())
-        for batch in self.dataset_loader.test_generator():
+        n_test_samples = len(self.dataset_factory.test_set())
+        for batch in self.dataset_factory.test_loader():
             losses = self.model.test_batch(batch)
             for name, value in losses.items():
                 if name not in test_losses:
@@ -122,7 +129,7 @@ class MLProject:
         best_model_fname = None
         for epoch_idx in range(self.config['n_train_epochs']):
             self.train_epoch()
-            if self.dataset_loader.has_test_set():
+            if self.dataset_factory.has_test_set():
                 score = self.test()
                 if self._is_better(score):
                     best_model_fname = self.save()
@@ -135,13 +142,14 @@ class MLProject:
         self.model.on_train_end()
 
     def train_epoch(self):
-        progbar = tqdm(self.dataset_loader.train_generator())
+        progbar = tqdm(self.dataset_factory.train_loader())
         self.model.on_epoch_begin(self.epoch)
         self.epoch_step = 0
         for batch in progbar:
-            losses = self.model.train_batch(batch)
-            # TODO: fix display issue in tensorboard
-            self.writer.add_scalars('training', losses, self.global_step)
+            outs = self.model.train_batch(batch)
+            # TODO: Add prefix to tensorboard
+            metrics = {m: outs[m] for m in self.model.metrics()}
+            self.writer.add_scalars('training', metrics, self.global_step)
             self.global_step += 1
             self.epoch_step += 1
         self.model.on_epoch_end(self.epoch)
@@ -161,9 +169,9 @@ class MLProject:
         }
 
     def save_filename(self):
-        return os.path.join(
+        return os.path.abspath(os.path.join(
             self.model_save_dir,
-            "{}_e{:05}_b{:05}.torch".format(self.model.name(), self.epoch, self.epoch_step))
+            "{}_e{:05}_b{:05}.torch".format(self.model.name(), self.epoch, self.epoch_step)))
 
     def save(self):
         torch.save(self.state_dict(), self.save_filename())

@@ -2,51 +2,65 @@ import os
 import copy
 import torchvision
 import torch
+from torch.utils.data import Dataset, DataLoader
 from mlproject.datasets import ClutteredMNIST
 
 
-class DatasetLoader:
-    def __init__(self,
-                 train_set=None, train_generator=None,
-                 test_set=None, test_generator=None,
-                 validation_set=None, validation_generator=None):
-        self._train_set = train_set
-        self._train_generator = train_generator
-        self._test_set = test_set
-        self._test_generator = test_generator
-        self._validation_set = validation_set
-        self._validation_generator = validation_generator
+class DatasetFactory:
+    """
+    The DatasetFactory provides access to the train/test/val datasets and all the dataset
+    iterators.
 
-    def train_set(self):
+    The `Dataset`'s returned by `train_set`, `test_set`, and `validation_set`
+    should be persistent, e.g.  an index should always return the same data and
+    label.
+
+    The `DataLoaders` returned by *_loader can of course return the data
+    augmented and in any order.
+    """
+    def __init__(self,
+                 train_set=None, train_loader=None,
+                 test_set=None, test_loader=None,
+                 validation_set=None, validation_loader=None):
+        self._train_set = train_set
+        self._train_loader = train_loader
+        self._test_set = test_set
+        self._test_loader = test_loader
+        self._validation_set = validation_set
+        self._validation_loader = validation_loader
+
+    def train_set(self) -> Dataset:
+        """Return the train set."""
         return self._train_set
 
-    def train_generator(self):
-        return self._train_generator
+    def train_loader(self) -> DataLoader:
+        """Return the DataLoader associated with the train set."""
+        return self._train_loader
 
-    def test_set(self):
+    def test_set(self) -> Dataset:
+        """Return the test set."""
         return self._test_set
 
-    def test_generator(self):
-        return self._train_generator
+    def test_loader(self) -> DataLoader:
+        """Return the DataLoader associated with the test set."""
+        return self._train_loader
 
-    def validation_set(self):
+    def validation_set(self) -> Dataset:
+        """Return the validation set."""
         return self._validation_set
 
-    def validation_generator(self):
-        return self._validation_generator
+    def validation_loader(self) -> DataLoader:
+        """Return the DataLoader associated with the validation set."""
+        return self._validation_loader
 
-    def has_train_set(self):
+    def has_train_set(self) -> bool:
         return self.train_set() is not None
 
-    def has_test_set(self):
+    def has_test_set(self) -> bool:
         return self.test_set() is not None
 
-    def has_validation_set(self):
+    def has_validation_set(self) -> bool:
         return self.validation_set() is not None
-
-    # TODO: implement state_dict for subclasses. Really needed?
-    def state_dict(self):
-        return {}
 
 
 def default_data_dir(maybe_data_dir=None):
@@ -59,7 +73,7 @@ def default_data_dir(maybe_data_dir=None):
                          "Please set the DATA_DIR enviroment variable.")
 
 
-class TorchvisionDatasetLoader(DatasetLoader):
+class TorchvisionDatasetFactory(DatasetFactory):
     # TODO: Extract more code from subclass
     def __init__(self, train_set=None, test_set=None, validation_set=None,
                  data_loader_kwargs={},
@@ -92,7 +106,7 @@ class TorchvisionDatasetLoader(DatasetLoader):
         )
 
 
-class CIFARDatasetLoader(TorchvisionDatasetLoader):
+class CIFARDatasetFactory(TorchvisionDatasetFactory):
     def __init__(self, batch_size=50, train_transform=None, test_transform=None, data_dir=None,
                  num_workers=0):
         self.data_dir = default_data_dir(data_dir)
@@ -110,7 +124,7 @@ class CIFARDatasetLoader(TorchvisionDatasetLoader):
         )
 
 
-class FashionMNISTDatasetLoader(TorchvisionDatasetLoader):
+class FashionMNISTDatasetFactory(TorchvisionDatasetFactory):
     def __init__(self, batch_size=1, train_transform=None, test_transform=None, data_dir=None,
                  num_workers=0, collate_fn=None, pin_memory=None, drop_last=None,
                  data_loader_train_kwargs=None,
@@ -142,7 +156,7 @@ class FashionMNISTDatasetLoader(TorchvisionDatasetLoader):
         )
 
 
-class MNISTDatasetLoader(TorchvisionDatasetLoader):
+class MNISTDatasetFactory(TorchvisionDatasetFactory):
     def __init__(self, batch_size=50, train_transform=None, test_transform=None, data_dir=None,
                  num_workers=0):
         self.data_dir = default_data_dir(data_dir)
@@ -160,7 +174,7 @@ class MNISTDatasetLoader(TorchvisionDatasetLoader):
         )
 
 
-class ClutteredMNISTDatasetLoader(TorchvisionDatasetLoader):
+class ClutteredMNISTDatasetFactory(TorchvisionDatasetFactory):
     def __init__(self, batch_size=50, train_transform=None, test_transform=None, data_dir=None,
                  shape=(100, 100), n_clutters=6, clutter_size=8, n_samples=60000,
                  num_workers=0):
