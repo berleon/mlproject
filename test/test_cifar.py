@@ -135,23 +135,24 @@ class CifarProject(MLProject):
     @staticmethod
     def get_model(config):
         net = ResNet18()
-        if torch.cuda.is_available():
-            net.to("cuda:0")
         opt = torch.optim.Adam(net.parameters())
         return ClassificationModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
 
 
-def test_cifar():
+def test_cifar(tmpdir):
     ex = Experiment()
     ex.add_config({
         'batch_size': 5,
-        'n_train_epochs':  1,
+        'n_epochs':  1,
         'tensorboard_dir': None,
+        'device': 'cuda:0',
+        'model_dir': str(tmpdir.join('models')),
     })
 
     @ex.automain
     def main(_run):
         proj = CifarProject.from_run(_run)
+        print(proj.model._device_args, proj.model._device_kwargs)
         proj.test()
         proj.train()
         proj.test()

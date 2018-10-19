@@ -40,8 +40,8 @@ A few dataset loaders are already implemented for:
 * FashionMNIST
 * CIFAR10
 
-You can implement a dataloader on your own. Just see the API of the
-[DatasetLoader](mlproject/dataset_loader.py) class.
+You can implement a dataset factory on your own. Just see the API of the
+[DatasetFactory](mlproject/dataset_factory.py) class.
 
 
 ## MLProject

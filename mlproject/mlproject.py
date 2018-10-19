@@ -7,8 +7,9 @@ import random
 from tensorboardX import SummaryWriter
 
 from mlproject.log import get_tensorboard_dir, DevNullSummaryWriter, set_global_writer
-from mlproject.utils import to_numpy, print_environment_vars
+from mlproject.utils import to_numpy
 from mlproject.dataset_factory import DatasetFactory
+from mlproject.model import Model
 
 
 def get_model_dir(config, model_identifier):
@@ -61,6 +62,7 @@ class MLProject:
                 device_name = 'cpu'
 
         self.device = torch.device(device_name)
+        print('DEVICE', self.device)
         self.model.to(self.device)
 
         self.global_step = global_step
@@ -85,14 +87,13 @@ class MLProject:
         set_global_writer(self.writer)
 
     @classmethod
-    def from_run(cls, _run: sacred.run.Run):
+    def from_run(cls, _run: sacred.run.Run) -> 'MLProject':
         sacred.commands.print_config(_run)
-        print_environment_vars()
         cfg = _run.config
         return cls(_run._id, cfg, _run=_run)
 
     @staticmethod
-    def get_model(config):
+    def get_model(config) -> Model:
         """
         Build a `mlproject.Model` for the given config.
         """
