@@ -14,8 +14,6 @@ from mlproject.dataset_factory import DatasetFactory
 def get_model_dir(config, model_identifier):
     if "model_dir" in config:
         model_dir = config['model_dir']
-    elif 'MODEL_DIR' in os.environ:
-        model_dir = os.environ['MODEL_DIR']
     else:
         raise Exception("Cannot figure out model dir.")
     return os.path.join(model_dir, model_identifier)
@@ -30,10 +28,22 @@ class MLProject:
                  epoch_step=0,
                  best_score=0,
                  model_save_dir=None,
-                 tensorboard_log_dir=None,
+                 tensorboard_run_dir=None,
                  model_state=None,
                  _run=None,
                  ):
+        """
+        The MLProject class is in carge of training the model and evaluating it.
+
+        Args:
+            _id (int):  Id of the current run
+            config (dict): Config dictionary from sacred
+            global_step (int): The global step of the model
+            movel_save_dir (str): The model directory to save it
+            tensorboard_run_dir (str): Path to the tensorboard run directory of the model
+            model_state (dict): model state_dict for loading weights
+            _run (sacred.Run): current sacred run (optional)
+        """
         self._id = _id or random.randint(int(1e10), int(1e10) + int(1e8))
         self.config = config
         self._run = _run
@@ -57,15 +67,15 @@ class MLProject:
         self.epoch = epoch
         self.epoch_step = epoch_step
         self.best_score = None
-        if tensorboard_log_dir is None and self.config.get('tensorboard', False):
-            self.tensorboard_log_dir = get_tensorboard_dir(
+        if tensorboard_run_dir is None and self.config.get('tensorboard_dir', None):
+            self.tensorboard_run_dir = get_tensorboard_dir(
                 str(self._id) + '_' + self.model.name())
         else:
-            self.tensorboard_log_dir = tensorboard_log_dir
-        if self.tensorboard_log_dir is None:
+            self.tensorboard_run_dir = tensorboard_run_dir
+        if self.tensorboard_run_dir is None:
             self.writer = DevNullSummaryWriter()
         else:
-            self.writer = SummaryWriter(self.tensorboard_log_dir)
+            self.writer = SummaryWriter(self.tensorboard_run_dir)
         if model_save_dir is None:
             self.model_save_dir = get_model_dir(self.config,
                                                 str(self._id) + '_' + self.model.name())
@@ -127,7 +137,7 @@ class MLProject:
         self.model.on_train_begin()
         self.model.train()
         best_model_fname = None
-        for epoch_idx in range(self.config['n_train_epochs']):
+        for epoch_idx in range(self.config['n_epochs']):
             self.train_epoch()
             if self.dataset_factory.has_test_set():
                 score = self.test()
@@ -164,7 +174,7 @@ class MLProject:
             'epoch_step': self.epoch_step,
             'best_score': self.best_score,
             'model_save_dir': self.model_save_dir,
-            'tensorboard_log_dir': self.tensorboard_log_dir,
+            'tensorboard_run_dir': self.tensorboard_run_dir,
             'model_state': self.model.state_dict(),
         }
 

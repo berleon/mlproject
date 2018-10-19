@@ -81,3 +81,23 @@ class CifarProject(MLProject):
         opt = torch.optim.Adam(net.parameters())
         return ClassificationModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
 ```
+## Sacred
+
+Sacred is used to keep track of the experiments.
+There are a few sacred configurations that will be used by the `MLProject` class.
+
+* `n_epochs`: Train the model for `n_epochs`. If you overwrite the `MLProject.train`, it will not be required.
+* `device`: The device to run your model on, e.g. "cuda:0".
+* `model_dir`: Saves the model to this directory.
+* `tensorboard_dir`: Save the tensorboard run in this directory. Set it to
+  `None` if you don't like to use tensorboard.
+
+## Makefile
+
+I find it handy to have a Makefile that then run the experiments.
+Something like this:
+
+```
+train:
+    ./main.py with tensorboard_dir=$(TENSORBOARD_DIR)
+```

@@ -146,7 +146,7 @@ def test_cifar():
     ex.add_config({
         'batch_size': 5,
         'n_train_epochs':  1,
-        'tensorboard': False,
+        'tensorboard_dir': None,
     })
 
     @ex.automain
