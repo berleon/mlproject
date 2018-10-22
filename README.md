@@ -26,6 +26,7 @@ class MyModel(mlproject.Model):
         used to compare two different models."""
         raise NotImplementedError()
 ```
+
 Compared to a standard PyTorch `nn.Module` class the `mlproject.Model` owns its
 optimizers.
 
@@ -85,12 +86,21 @@ class CifarProject(MLProject):
 
 Sacred is used to keep track of the experiments.
 There are a few sacred configurations that will be used by the `MLProject` class.
+You can overwrite all methods in `MLProject` and use your own
+configuration names.
 
-* `n_epochs`: Train the model for `n_epochs`. If you overwrite the `MLProject.train`, it will not be required.
-* `device`: The device to run your model on, e.g. "cuda:0".
+Required:
+* `n_epochs`: Train the model for this number of epochs. Can be
+  omitted if `n_global_iterations` is given.
+* `n_global_iterations`: Train the model for at most this number of
+  iterations. If given, it has precedence over `n_epochs`. Default: `0`
 * `model_dir`: Saves the model to this directory.
-* `tensorboard_dir`: Save the tensorboard run in this directory. Set it to
-  `None` if you don't like to use tensorboard.
+
+Optional:
+* `device`: The device to run your model on, e.g. `cuda:0`. Default: `cpu`
+* `tensorboard_dir`: Save the tensorboard run in this directory. If `None`, tensorboard is not used. Default: `None`
+* `log_iteration_scalars`: number of iterations when to log scalars Default: `1`
+* `log_iteration_all`: number of iterations when to log everything  Default: `every_epoch`
 
 ## Makefile
 

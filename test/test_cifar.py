@@ -143,7 +143,7 @@ def test_cifar(tmpdir):
     ex = Experiment()
     ex.add_config({
         'batch_size': 5,
-        'n_epochs':  1,
+        'n_global_iterations':  3,
         'tensorboard_dir': None,
         'device': 'cuda:0' if torch.cuda.is_available() else 'cpu',
         'model_dir': str(tmpdir.join('models')),
@@ -155,6 +155,7 @@ def test_cifar(tmpdir):
         print(proj.model._device_args, proj.model._device_kwargs)
         proj.test()
         proj.train()
+        print(proj.model._device_args, proj.model._device_kwargs)
         proj.test()
 
     ex.run()

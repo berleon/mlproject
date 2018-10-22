@@ -1,4 +1,5 @@
 import os
+import copy
 from collections import OrderedDict
 import sacred
 from tqdm import tqdm
@@ -18,6 +19,10 @@ def get_model_dir(config, model_identifier):
     else:
         raise Exception("Cannot figure out model dir.")
     return os.path.join(model_dir, model_identifier)
+
+
+class TrainingStop(Exception):
+    pass
 
 
 class MLProject:
@@ -46,7 +51,7 @@ class MLProject:
             _run (sacred.Run): current sacred run (optional)
         """
         self._id = _id or random.randint(int(1e10), int(1e10) + int(1e8))
-        self.config = config
+        self.config = copy.deepcopy(config)
         self._run = _run
         self.dataset_factory = self.get_dataset_factory(self.config)
         self.model = self.get_model(self.config)
@@ -62,7 +67,6 @@ class MLProject:
                 device_name = 'cpu'
 
         self.device = torch.device(device_name)
-        print('DEVICE', self.device)
         self.model.to(self.device)
 
         self.global_step = global_step
@@ -79,8 +83,8 @@ class MLProject:
         else:
             self.writer = SummaryWriter(self.tensorboard_run_dir)
         if model_save_dir is None:
-            self.model_save_dir = get_model_dir(self.config,
-                                                str(self._id) + '_' + self.model.name())
+            self.model_save_dir = get_model_dir(
+                self.config, str(self._id) + '_' + self.model.name())
             os.makedirs(self.model_save_dir)
         else:
             self.model_save_dir = model_save_dir
@@ -134,12 +138,22 @@ class MLProject:
         print("[TEST] " + loss_info)
         return test_losses[self.model.benchmark_metric()]
 
+    def _should_stop_training(self):
+        if 'n_global_iterations' in self.config:
+            return self.global_step >= self.config['n_global_iterations']
+        else:
+            return self.epoch >= self.epoch['n_epochs']
+
     def train(self):
         self.model.on_train_begin()
         self.model.train()
         best_model_fname = None
-        for epoch_idx in range(self.config['n_epochs']):
-            self.train_epoch()
+
+        while True:
+            try:
+                self.train_epoch()
+            except TrainingStop:
+                break
             if self.dataset_factory.has_test_set():
                 score = self.test()
                 if self._is_better(score):
@@ -153,6 +167,8 @@ class MLProject:
         self.model.on_train_end()
 
     def train_epoch(self):
+        if self._should_stop_training():
+            raise TrainingStop()
         progbar = tqdm(self.dataset_factory.train_loader(), ascii=True)
         self.model.on_epoch_begin(self.epoch)
         self.epoch_step = 0
@@ -162,6 +178,9 @@ class MLProject:
             self.writer.add_scalars(metrics, self.global_step)
             self.global_step += 1
             self.epoch_step += 1
+            if self._should_stop_training():
+                raise TrainingStop()
+
         self.model.on_epoch_end(self.epoch)
         self.epoch += 1
 
