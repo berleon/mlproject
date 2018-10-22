@@ -10,8 +10,13 @@ class LogLevel(enum.Enum):
 
 class Model(nn.Module):
     """
-
+    This call holds the model (the pytorch layers and weights) but
+    also knows how to train the model for a single given batch.
+    For simple cases, such as classification you might be able to
+    use the `SimpleModel` class.  When subclassing, you have to
+    implement the `train_batch` and `test_batch` methods.
     """
+
     def __init__(self, device='cpu'):
         super().__init__()
         self._device_args = [device]
@@ -36,8 +41,8 @@ class Model(nn.Module):
         The optimization step should happen inside here. `self.metrics` decides
         which outputs are logged.  You can inspect the log level with
         `self.log`. The number of log iterations can be configured using the
-        `iter_log_scalars` and `iter_log_all` config entries. Use the `self.log`
-        member to skip costly computations.
+        `log_iteration_scalars` and `log_iteration_all` config
+        entries. Use the `self.log` member to skip costly computations.
 
         A possible implementation could look like this:
 
@@ -52,7 +57,11 @@ class Model(nn.Module):
             self.opt.step()
             if self.log.SCALARS:
                 return {'loss': loss.item()}
-            elif self.log.ALL
+            elif self.log.ALL:
+                return {
+                    'loss': loss.item(),
+                    'images': self.takes_long_time_to_generate(imgs)
+                }
         ```
         """
         raise NotImplementedError()
