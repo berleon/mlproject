@@ -1,12 +1,5 @@
 from torch import nn
-import enum
-
-
-class LogLevel(enum.Enum):
-    NONE = 0
-    SCALARS = 1
-    ALL = 2
-
+from mlproject.log import LogLevel
 
 # TODO: create metric class that know how to compare two models
 

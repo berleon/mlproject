@@ -145,6 +145,7 @@ class MLProject:
             return self.epoch >= self.config['n_epochs']
 
     def train(self):
+        # TODO: Crtl-C should save the model
         self.model.on_train_begin()
         self.model.train()
         best_model_fname = None
