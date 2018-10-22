@@ -1,7 +1,7 @@
 from mlproject.mlproject import MLProject
 from sacred import Experiment
 from mlproject.data import CIFARDatasetFactory
-from mlproject.model import ClassificationModel
+from mlproject.model import ProxyModel
 
 import torch
 import torch.nn as nn
@@ -136,7 +136,7 @@ class CifarProject(MLProject):
     def get_model(config):
         net = ResNet18()
         opt = torch.optim.Adam(net.parameters())
-        return ClassificationModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
+        return ProxyModel('test_cifar', net, opt, loss=nn.CrossEntropyLoss())
 
 
 def test_cifar(tmpdir):
@@ -145,7 +145,7 @@ def test_cifar(tmpdir):
         'batch_size': 5,
         'n_epochs':  1,
         'tensorboard_dir': None,
-        'device': 'cuda:0',
+        'device': 'cuda:0' if torch.cuda.is_available() else 'cpu',
         'model_dir': str(tmpdir.join('models')),
     })
 

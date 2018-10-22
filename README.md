@@ -79,7 +79,7 @@ class CifarProject(MLProject):
         if torch.cuda.is_available():
             net.to("cuda:0")
         opt = torch.optim.Adam(net.parameters())
-        return ClassificationModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
+        return ProxyModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
 ```
 ## Sacred
 

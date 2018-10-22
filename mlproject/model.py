@@ -1,11 +1,22 @@
 from torch import nn
+import enum
+
+
+class LogLevel(enum.Enum):
+    NONE = 0
+    SCALARS = 1
+    ALL = 2
 
 
 class Model(nn.Module):
+    """
+
+    """
     def __init__(self, device='cpu'):
         super().__init__()
         self._device_args = [device]
         self._device_kwargs = {}
+        self.log = LogLevel.SCALARS
 
     def set_device_from_model(self, model):
         """Specific name of the model."""
@@ -20,8 +31,30 @@ class Model(nn.Module):
         return self.__class__.__name__
 
     def train_batch(self, batch) -> {}:
-        """Train the model with the given batch.
-        `self.metrics` decides which outputs are logged."""
+        """
+        Train the model with the given batch and return some useful statistics.
+        The optimization step should happen inside here. `self.metrics` decides
+        which outputs are logged.  You can inspect the log level with
+        `self.log`. The number of log iterations can be configured using the
+        `iter_log_scalars` and `iter_log_all` config entries. Use the `self.log`
+        member to skip costly computations.
+
+        A possible implementation could look like this:
+
+        ```
+        def train_batch(self, batch) -> {}:
+            self.opt.zero_grad()
+            imgs, labels = self.to_device(batch)
+            logits = self(imgs)
+            loss = - nll(logits, labels)
+            loss.backward()
+
+            self.opt.step()
+            if self.log.SCALARS:
+                return {'loss': loss.item()}
+            elif self.log.ALL
+        ```
+        """
         raise NotImplementedError()
 
     def test_batch(self, batch) -> {}:
@@ -66,22 +99,22 @@ class Model(nn.Module):
             return batch.to(*self._device_args, **self._device_kwargs)
 
 
-class ClassificationModel(Model):
-    def __init__(self, model, optimizer, loss, name):
-        super().__init__()
-        self.model = model
+class SimpleModel(Model):
+    """
+    As with a normal pytorch `nn.Module` implement `def forward` function.
+    And provide an optimizer and loss layer.
+    """
+
+    def __init__(self, name, optimizer, loss, device='cpu'):
+        super().__init__(device)
+        self._name = name
         self.optimizer = optimizer
         self.loss = loss
-        self._name = name
-        self.set_device_from_model(self.model)
-
-    def name(self):
-        return self._name
 
     def train_batch(self, batch):
         input, labels = self.to_device(batch)
         self.optimizer.zero_grad()
-        output = self.model(input)
+        output = self(input)
         loss = self.loss(output, labels)
         loss.backward()
         self.optimizer.step()
@@ -89,5 +122,14 @@ class ClassificationModel(Model):
 
     def test_batch(self, batch):
         input, labels = self.to_device(batch)
-        output = self.model(input)
+        output = self(input)
         return {'loss': self.loss(output, labels)}
+
+
+class ProxyModel(SimpleModel):
+    def __init__(self, name, model, optimizer, loss, device='cpu'):
+        super().__init__(name, optimizer, loss, device)
+        self.model = model
+
+    def forward(self, *args, **kwargs):
+        return self.model(*args, **kwargs)
