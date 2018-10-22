@@ -142,7 +142,7 @@ class MLProject:
         if 'n_global_iterations' in self.config:
             return self.global_step >= self.config['n_global_iterations']
         else:
-            return self.epoch >= self.epoch['n_epochs']
+            return self.epoch >= self.config['n_epochs']
 
     def train(self):
         self.model.on_train_begin()
@@ -167,16 +167,13 @@ class MLProject:
         self.model.on_train_end()
 
     def _set_log_level(self):
-        log_iteration_scalars = self.config['log_iteration_scalars']
-        log_iteration_all = self.config['log_iteration_all']
+        log_it_scalars = self.config.get('log_iteration_scalars', None)
+        log_it_all = self.config.get('log_iteration_all', None)
 
-        if (self.epoch_step % log_iteration_scalars) == 0:
-            if (self.epoch_step % log_iteration_all) == 0:
-                self.model.log = LogLevel.ALL
-            else:
-                self.model.log = LogLevel.SCALARS
-        elif (self.epoch_step % log_iteration_all) == 0:
+        if log_it_all and (self.epoch_step % log_it_all) == 0:
             self.model.log = LogLevel.ALL
+        elif log_it_scalars and (self.epoch_step % log_it_scalars) == 0:
+            self.model.log = LogLevel.SCALARS
         else:
             self.model.log = LogLevel.NONE
 
@@ -197,7 +194,6 @@ class MLProject:
                 raise TrainingStop()
 
         self.model.on_epoch_end(self.epoch)
-        self.epoch += 1
 
     def state_dict(self):
         return {
