@@ -8,6 +8,9 @@ class LogLevel(enum.Enum):
     ALL = 2
 
 
+# TODO: create metric class that know how to compare two models
+
+
 class Model(nn.Module):
     """
     This call holds the model (the pytorch layers and weights) but
@@ -110,8 +113,8 @@ class Model(nn.Module):
 
 class SimpleModel(Model):
     """
-    As with a normal pytorch `nn.Module` implement `def forward` function.
-    And provide an optimizer and loss layer.
+    As with a normal pytorch `nn.Module` just implement `def forward` function.
+    You also have to provide an optimizer and a loss layer.
     """
 
     def __init__(self, name, optimizer, loss, device='cpu'):
@@ -139,6 +142,7 @@ class ProxyModel(SimpleModel):
     def __init__(self, name, model, optimizer, loss, device='cpu'):
         super().__init__(name, optimizer, loss, device)
         self.model = model
+        self.set_device_from_model(model)
 
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)

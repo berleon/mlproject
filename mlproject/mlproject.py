@@ -10,7 +10,7 @@ from tensorboardX import SummaryWriter
 from mlproject.log import get_tensorboard_dir, DevNullSummaryWriter, set_global_writer
 from mlproject.utils import to_numpy
 from mlproject.data import DatasetFactory
-from mlproject.model import Model
+from mlproject.model import Model, LogLevel
 
 
 def get_model_dir(config, model_identifier):
@@ -166,6 +166,20 @@ class MLProject:
                 self._run.add_artifact(best_model_fname)
         self.model.on_train_end()
 
+    def _set_log_level(self):
+        log_iteration_scalars = self.config['log_iteration_scalars']
+        log_iteration_all = self.config['log_iteration_all']
+
+        if (self.epoch_step % log_iteration_scalars) == 0:
+            if (self.epoch_step % log_iteration_all) == 0:
+                self.model.log = LogLevel.ALL
+            else:
+                self.model.log = LogLevel.SCALARS
+        elif (self.epoch_step % log_iteration_all) == 0:
+            self.model.log = LogLevel.ALL
+        else:
+            self.model.log = LogLevel.NONE
+
     def train_epoch(self):
         if self._should_stop_training():
             raise TrainingStop()
@@ -173,6 +187,7 @@ class MLProject:
         self.model.on_epoch_begin(self.epoch)
         self.epoch_step = 0
         for batch in progbar:
+            self._set_log_level()
             outs = self.model.train_batch(batch)
             metrics = {m: outs[m] for m in self.model.metrics() if m in outs}
             self.writer.add_scalars(metrics, self.global_step)
@@ -208,4 +223,5 @@ class MLProject:
 
     @classmethod
     def load(cls, filename):
+        # TODO: check if training can be continued
         return cls(**torch.load(filename))

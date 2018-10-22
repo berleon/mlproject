@@ -9,6 +9,7 @@ from PIL import Image
 
 
 class ClutteredMNIST:
+    # TODO: Export dataset
     def __init__(self, dataset, shape=(100, 100), n_clutters=6, clutter_size=8,
                  n_samples=60000, transform=None):
         self.dataset = dataset
