@@ -142,7 +142,7 @@ class MLProject:
         if 'n_global_iterations' in self.config:
             return self.global_step >= self.config['n_global_iterations']
         else:
-            return self.epoch >= self.epoch['n_epochs']
+            return self.epoch >= self.config['n_epochs']
 
     def train(self):
         self.model.on_train_begin()
@@ -197,7 +197,6 @@ class MLProject:
                 raise TrainingStop()
 
         self.model.on_epoch_end(self.epoch)
-        self.epoch += 1
 
     def state_dict(self):
         return {
