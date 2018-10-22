@@ -27,8 +27,8 @@ class TrainingStop(Exception):
 
 class MLProject:
     def __init__(self,
-                 _id,
                  config,
+                 _id=None,
                  global_step=0,
                  epoch=0,
                  epoch_step=0,
@@ -94,7 +94,7 @@ class MLProject:
     def from_run(cls, _run: sacred.run.Run) -> 'MLProject':
         sacred.commands.print_config(_run)
         cfg = _run.config
-        return cls(_run._id, cfg, _run=_run)
+        return cls(cfg, _id=_run._id, _run=_run)
 
     @staticmethod
     def get_model(config) -> Model:
