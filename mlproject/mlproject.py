@@ -8,7 +8,7 @@ from tensorboardX import SummaryWriter
 
 from mlproject.log import get_tensorboard_dir, DevNullSummaryWriter, set_global_writer
 from mlproject.utils import to_numpy
-from mlproject.dataset_factory import DatasetFactory
+from mlproject.data import DatasetFactory
 from mlproject.model import Model
 
 
@@ -153,14 +153,13 @@ class MLProject:
         self.model.on_train_end()
 
     def train_epoch(self):
-        progbar = tqdm(self.dataset_factory.train_loader())
+        progbar = tqdm(self.dataset_factory.train_loader(), ascii=True)
         self.model.on_epoch_begin(self.epoch)
         self.epoch_step = 0
         for batch in progbar:
             outs = self.model.train_batch(batch)
-            # TODO: Add prefix to tensorboard
-            metrics = {m: outs[m] for m in self.model.metrics()}
-            self.writer.add_scalars('training', metrics, self.global_step)
+            metrics = {m: outs[m] for m in self.model.metrics() if m in outs}
+            self.writer.add_scalars(metrics, self.global_step)
             self.global_step += 1
             self.epoch_step += 1
         self.model.on_epoch_end(self.epoch)

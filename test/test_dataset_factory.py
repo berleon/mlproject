@@ -1,5 +1,5 @@
 import numpy as np
-from mlproject.dataset_factory import CIFARDatasetFactory, MNISTDatasetFactory, \
+from mlproject.data import CIFARDatasetFactory, MNISTDatasetFactory, \
     ClutteredMNISTDatasetFactory, FashionMNISTDatasetFactory
 from torchvision.transforms import ToTensor
 

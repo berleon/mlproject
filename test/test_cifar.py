@@ -1,6 +1,6 @@
 from mlproject.mlproject import MLProject
 from sacred import Experiment
-from mlproject.dataset_factory import CIFARDatasetFactory
+from mlproject.data import CIFARDatasetFactory
 from mlproject.model import ClassificationModel
 
 import torch

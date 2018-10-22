@@ -1,9 +1,82 @@
+import numpy as np
+
 import os
 import copy
 import torchvision
 import torch
 from torch.utils.data import Dataset, DataLoader
-from mlproject.datasets import ClutteredMNIST
+from PIL import Image
+
+
+class ClutteredMNIST:
+    def __init__(self, dataset, shape=(100, 100), n_clutters=6, clutter_size=8,
+                 n_samples=60000, transform=None):
+        self.dataset = dataset
+        self.shape = shape
+        self.n_clutters = n_clutters
+        self.clutter_size = clutter_size
+        self.n_samples = n_samples
+        self.transform = transform
+        self.parameters = self.generate_parameters()
+
+    def generate_parameters(self):
+        all_params = []
+        h, w = self.dataset[0][0].size
+        for i in range(self.n_samples):
+            params = {
+                'idx': i % len(self.dataset),
+                'digit_h': np.random.randint(0, self.shape[0] - h),
+                'digit_w': np.random.randint(0, self.shape[1] - w),
+            }
+            clutter = []
+            for _ in range(self.n_clutters):
+                clutter_idx = np.random.randint(0, len(self.dataset))
+                cs = self.clutter_size
+                ph = np.random.randint(0, h - cs)
+                pw = np.random.randint(0, w - cs)
+                ch = np.random.randint(0, self.shape[0] - cs)
+                cw = np.random.randint(0, self.shape[1] - cs)
+                clutter.append({
+                    'clutter_idx': clutter_idx,
+                    'patch_h': ph,
+                    'patch_w': pw,
+                    'clutter_h': ch,
+                    'clutter_w': cw,
+                })
+            params['clutter'] = clutter
+            all_params.append(params)
+        return all_params
+
+    def __len__(self):
+        return self.n_samples
+
+    def __getitem__(self, idx):
+        canvas = np.zeros(self.shape, dtype=np.uint8)
+        params = self.parameters[idx]
+        for clutter in params['clutter']:
+            clutter_img = np.array(self.dataset[clutter['clutter_idx']][0])
+            h, w = clutter_img.shape
+            # select patch
+            cs = self.clutter_size
+            ph = clutter['patch_h']
+            pw = clutter['patch_w']
+            patch = clutter_img[ph:ph+cs, pw:pw+cs]
+            # place patch
+            ch = clutter['clutter_h']
+            cw = clutter['clutter_w']
+            canvas[ch:ch+cs, cw:cw+cs] = patch
+
+        img, label = self.dataset[params['idx']]
+        img = np.array(img)
+        h, w = img.shape
+        dh = params['digit_h']
+        dw = params['digit_w']
+        canvas[dh:dh+h, dw:dw+w] = img
+        pil_img = Image.fromarray(canvas, mode='L')
+        if self.transform is not None:
+            return self.transform(pil_img), label
+        else:
+            return pil_img, label
 
 
 class DatasetFactory:
@@ -61,6 +134,36 @@ class DatasetFactory:
 
     def has_validation_set(self) -> bool:
         return self.validation_set() is not None
+
+
+class CycleDataLoader(DataLoader):
+    def __init__(self, dataloader, n_cycles=1000):
+        self.dataloader = dataloader
+        self.n_cycles = n_cycles
+
+    def __iter__(self):
+        for _ in range(self.n_cycles):
+            for batch in self.dataloader:
+                yield batch
+
+    def __len__(self):
+        return len(self.dataloader) * self.n_cycles
+
+
+class CycleDatasetFactory(DatasetFactory):
+    def __init__(self, factory: DatasetFactory, n_cycles=1000):
+        def cycle(loader):
+            if loader is None:
+                return None
+            return CycleDataLoader(loader, n_cycles)
+        super().__init__(
+            factory.train_set(),
+            cycle(factory.train_loader()),
+            factory.test_set(),
+            cycle(factory.test_loader()),
+            factory.validation_set(),
+            cycle(factory.validation_loader()),
+        )
 
 
 def default_data_dir(maybe_data_dir=None):
