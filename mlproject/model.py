@@ -1,6 +1,7 @@
 from torch import nn
 from mlproject.log import LogLevel
 
+
 # TODO: create metric class that know how to compare two models
 
 
@@ -106,15 +107,23 @@ class Model(nn.Module):
 
 class SimpleModel(Model):
     """
-    As with a normal pytorch `nn.Module` just implement `def forward` function.
-    You also have to provide an optimizer and a loss layer.
+    For simple models, you can use this class. Given a model,
+    optimizer and a loss layer, this class puts them together in
+    a straight way.
     """
 
-    def __init__(self, name, optimizer, loss, device='cpu'):
+    def __init__(self, name, model, optimizer, loss, device='cpu'):
         super().__init__(device)
+        self.model = model
         self._name = name
         self.optimizer = optimizer
         self.loss = loss
+
+    def name(self):
+        return self._name
+
+    def forward(self, *args, **kwargs):
+        return self.model(*args, **kwargs)
 
     def train_batch(self, batch):
         input, labels = self.to_device(batch)
@@ -129,13 +138,3 @@ class SimpleModel(Model):
         input, labels = self.to_device(batch)
         output = self(input)
         return {'loss': self.loss(output, labels)}
-
-
-class ProxyModel(SimpleModel):
-    def __init__(self, name, model, optimizer, loss, device='cpu'):
-        super().__init__(name, optimizer, loss, device)
-        self.model = model
-        self.set_device_from_model(model)
-
-    def forward(self, *args, **kwargs):
-        return self.model(*args, **kwargs)

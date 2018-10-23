@@ -50,8 +50,9 @@ class MLProject:
             model_state (dict): model state_dict for loading weights
             _run (sacred.Run): current sacred run (optional)
         """
+        # TODO: set default config
         self._id = _id or random.randint(int(1e10), int(1e10) + int(1e8))
-        self.config = copy.deepcopy(config)
+        self.config = self.set_defaults(copy.deepcopy(config))
         self._run = _run
         self.dataset_factory = self.get_dataset_factory(self.config)
         self.model = self.get_model(self.config)
@@ -90,8 +91,23 @@ class MLProject:
             self.model_save_dir = model_save_dir
         set_global_writer(self.writer)
 
+    @staticmethod
+    def set_defaults(config):
+        def maybe_set(name, value):
+            if name not in config:
+                config[name] = value
+
+        if 'n_global_iterations' in config:
+            maybe_set('n_epochs', 1)
+        maybe_set('device', 'cpu')
+        maybe_set('log_iteration_scalars', 1)
+        maybe_set('log_iteration_all', 'epoch')
+        maybe_set('save_iterations', 'epoch')
+        return config
+
     @classmethod
     def from_run(cls, _run: sacred.run.Run) -> 'MLProject':
+        """ Create a MLProject from a scared ``Run``.  """
         sacred.commands.print_config(_run)
         cfg = _run.config
         return cls(cfg, _id=_run._id, _run=_run)
@@ -138,11 +154,41 @@ class MLProject:
         print("[TEST] " + loss_info)
         return test_losses[self.model.benchmark_metric()]
 
+    def _should_save(self):
+        save_iterations = self.config['save_iterations']
+        if self.config['save_iterations'] == 'epoch':
+            save_iterations = len(self.dataset_factory.train_loader())
+        return (self.epoch_step + 1) % save_iterations == 0
+
     def _should_stop_training(self):
         if 'n_global_iterations' in self.config:
             return self.global_step >= self.config['n_global_iterations']
         else:
             return self.epoch >= self.config['n_epochs']
+
+    def _iterations_left(self, data_loader_length):
+        print('data length', data_loader_length)
+        if 'n_global_iterations' in self.config:
+            global_iterations = self.config['n_global_iterations']
+            iterations_after_epoch = self.global_step + data_loader_length
+            if iterations_after_epoch > global_iterations:
+                return global_iterations - self.global_step
+        return data_loader_length
+
+    def _set_log_level(self):
+        log_iteration_scalars = self.config['log_iteration_scalars']
+        log_iteration_all = self.config['log_iteration_all']
+        if log_iteration_all == 'epoch':
+            log_iteration_all = len(self.dataset_factory.train_loader())
+        if (self.epoch_step + 1) % log_iteration_scalars == 0:
+            if (self.epoch_step + 1) % log_iteration_all == 0:
+                self.model.log = LogLevel.ALL
+            else:
+                self.model.log = LogLevel.SCALARS
+        elif (self.epoch_step + 1) % log_iteration_all == 0:
+            self.model.log = LogLevel.ALL
+        else:
+            self.model.log = LogLevel.NONE
 
     def train(self):
         # TODO: Crtl-C should save the model
@@ -167,32 +213,27 @@ class MLProject:
                 self._run.add_artifact(best_model_fname)
         self.model.on_train_end()
 
-    def _set_log_level(self):
-        log_it_scalars = self.config.get('log_iteration_scalars', None)
-        log_it_all = self.config.get('log_iteration_all', None)
-
-        if log_it_all and (self.epoch_step % log_it_all) == 0:
-            self.model.log = LogLevel.ALL
-        elif log_it_scalars and (self.epoch_step % log_it_scalars) == 0:
-            self.model.log = LogLevel.SCALARS
-        else:
-            self.model.log = LogLevel.NONE
-
     def train_epoch(self):
         if self._should_stop_training():
             raise TrainingStop()
-        progbar = tqdm(self.dataset_factory.train_loader(), ascii=True)
+        train_loader = self.dataset_factory.train_loader()
+        progbar = tqdm(train_loader, ascii=True,
+                       total=self._iterations_left(len(train_loader)))
         self.model.on_epoch_begin(self.epoch)
         self.epoch_step = 0
         for batch in progbar:
             self._set_log_level()
             outs = self.model.train_batch(batch)
             metrics = {m: outs[m] for m in self.model.metrics() if m in outs}
-            self.writer.add_scalars(metrics, self.global_step)
-            self.global_step += 1
-            self.epoch_step += 1
+            if metrics:
+                self.writer.add_scalars(metrics, self.global_step)
+            if self._should_save():
+                print('model saved:', self.save())
+
             if self._should_stop_training():
                 raise TrainingStop()
+            self.global_step += 1
+            self.epoch_step += 1
 
         self.model.on_epoch_end(self.epoch)
 

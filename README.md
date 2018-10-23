@@ -82,6 +82,7 @@ class CifarProject(MLProject):
         opt = torch.optim.Adam(net.parameters())
         return ProxyModel(net, opt, loss=nn.CrossEntropyLoss(), name='test_cifar')
 ```
+
 ## Sacred
 
 Sacred is used to keep track of the experiments.
@@ -98,9 +99,13 @@ Required:
 
 Optional:
 * `device`: The device to run your model on, e.g. `cuda:0`. Default: `cpu`
-* `tensorboard_dir`: Save the tensorboard run in this directory. If `None`, tensorboard is not used. Default: `None`
-* `log_iteration_scalars`: number of iterations when to log scalars Default: `1`
-* `log_iteration_all`: number of iterations when to log everything  Default: `every_epoch`
+* `tensorboard_dir`: Save the tensorboard run in this directory. If `None`,
+  tensorboard is not used. Default: `None`
+* `log_iteration_scalars`: number of iterations when to log scalars. Default: `1`
+* `log_iteration_all`: number of iterations when to log everything. Use `epoch`
+  to log it at the end of every epoch. Default: `epoch`
+* `save_iterations`: number of iterations when save the model. Use `epoch` to
+  save it at the end of every epoch. Default: `epoch`
 
 ## Makefile
 
