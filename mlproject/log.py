@@ -1,4 +1,11 @@
 import os
+import enum
+
+
+class LogLevel(enum.IntEnum):
+    NONE = 0
+    SCALARS = 1
+    ALL = 2
 
 
 def get_tensorboard_dir(model_prefix, tensorboard_dir=None):
