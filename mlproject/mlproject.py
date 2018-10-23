@@ -24,7 +24,6 @@ def get_model_dir(config, model_identifier):
 class TrainingStop(Exception):
     pass
 
-
 class MLProject:
     def __init__(self,
                  config,
@@ -32,7 +31,7 @@ class MLProject:
                  global_step=0,
                  epoch=0,
                  epoch_step=0,
-                 best_score=0,
+                 best_score=None,
                  model_save_dir=None,
                  tensorboard_run_dir=None,
                  model_state=None,
@@ -45,7 +44,7 @@ class MLProject:
             _id (int):  Id of the current run
             config (dict): Config dictionary from sacred
             global_step (int): The global step of the model
-            movel_save_dir (str): The model directory to save it
+            model_save_dir (str): The model directory to save it
             tensorboard_run_dir (str): Path to the tensorboard run directory of the model
             model_state (dict): model state_dict for loading weights
             _run (sacred.Run): current sacred run (optional)
@@ -72,7 +71,7 @@ class MLProject:
         self.global_step = global_step
         self.epoch = epoch
         self.epoch_step = epoch_step
-        self.best_score = None
+        self.best_score = best_score
         if tensorboard_run_dir is None and self.config.get('tensorboard_dir', None):
             self.tensorboard_run_dir = get_tensorboard_dir(
                 str(self._id) + '_' + self.model.name())
@@ -134,7 +133,7 @@ class MLProject:
 
         loss_info = ", ".join(["{}: {:.4f}".format(name, float(loss))
                                for name, loss in sorted(test_losses.items())])
-        self.writer.add_scalars('test', test_losses, self.global_step)
+        self.writer.add_scalars(self.model.name() + '/test', test_losses, self.global_step)
         print("[TEST] " + loss_info)
         return test_losses[self.model.benchmark_metric()]
 
@@ -187,7 +186,7 @@ class MLProject:
             self._set_log_level()
             outs = self.model.train_batch(batch)
             metrics = {m: outs[m] for m in self.model.metrics() if m in outs}
-            self.writer.add_scalars(metrics, self.global_step)
+            self.writer.add_scalars(self.model.name() + '/train', metrics, global_step=self.global_step)
             self.global_step += 1
             self.epoch_step += 1
             if self._should_stop_training():
