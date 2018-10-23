@@ -167,16 +167,13 @@ class MLProject:
         self.model.on_train_end()
 
     def _set_log_level(self):
-        log_iteration_scalars = self.config['log_iteration_scalars']
-        log_iteration_all = self.config['log_iteration_all']
+        log_it_scalars = self.config.get('log_iteration_scalars', None)
+        log_it_all = self.config.get('log_iteration_all', None)
 
-        if (self.epoch_step % log_iteration_scalars) == 0:
-            if (self.epoch_step % log_iteration_all) == 0:
-                self.model.log = LogLevel.ALL
-            else:
-                self.model.log = LogLevel.SCALARS
-        elif (self.epoch_step % log_iteration_all) == 0:
+        if log_it_all and (self.epoch_step % log_it_all) == 0:
             self.model.log = LogLevel.ALL
+        elif log_it_scalars and (self.epoch_step % log_it_scalars) == 0:
+            self.model.log = LogLevel.SCALARS
         else:
             self.model.log = LogLevel.NONE
 
