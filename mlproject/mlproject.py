@@ -139,14 +139,17 @@ class MLProject:
         # TODO: seperate validation and test
         self.model.eval()
         test_losses = OrderedDict()
-        n_test_samples = len(self.dataset_factory.test_set())
         for batch in self.dataset_factory.test_loader():
             losses = self.model.test_batch(batch)
             for name, value in losses.items():
                 if name not in test_losses:
                     test_losses[name] = 0
-                test_losses[name] += float(to_numpy(value) / n_test_samples)
+                test_losses[name] += float(to_numpy(value))
 
+        # average over batches
+        n_test_batches = len(self.dataset_factory.test_loader())
+        for name, loss in test_losses.items(): test_losses[name] = loss/n_test_batches
+        # write and print
         loss_info = ", ".join(["{}: {:.4f}".format(name, float(loss))
                                for name, loss in sorted(test_losses.items())])
         self.writer.add_scalars(self.model.name() + '/test', test_losses, self.global_step)
