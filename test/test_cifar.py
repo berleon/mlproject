@@ -1,7 +1,7 @@
 from mlproject.mlproject import MLProject
 from sacred import Experiment
 from mlproject.data import CIFARDatasetFactory
-from mlproject.model import ProxyModel
+from mlproject.model import SimpleModel
 
 import torch
 import torch.nn as nn
@@ -136,7 +136,7 @@ class CifarProject(MLProject):
     def get_model(config):
         net = ResNet18()
         opt = torch.optim.Adam(net.parameters())
-        return ProxyModel('test_cifar', net, opt, loss=nn.CrossEntropyLoss())
+        return SimpleModel('test_cifar', net, opt, loss=nn.CrossEntropyLoss())
 
 
 def test_cifar(tmpdir):

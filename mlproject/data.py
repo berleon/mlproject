@@ -117,7 +117,7 @@ class DatasetFactory:
 
     def test_loader(self) -> DataLoader:
         """Return the DataLoader associated with the test set."""
-        return self._train_loader
+        return self._test_loader
 
     def validation_set(self) -> Dataset:
         """Return the validation set."""
@@ -186,12 +186,12 @@ class TorchvisionDatasetFactory(DatasetFactory):
         train_kwargs = copy.copy(data_loader_kwargs)
         train_kwargs.update(data_loader_train_kwargs)
         test_kwargs = copy.copy(data_loader_kwargs)
-        test_kwargs.update(data_loader_train_kwargs)
+        test_kwargs.update(data_loader_test_kwargs)
 
         if train_set is not None:
             trainloader = torch.utils.data.DataLoader(train_set, **train_kwargs)
         else:
-            self._trainloader = None
+            trainloader = None
 
         if test_set is not None:
             testloader = torch.utils.data.DataLoader(test_set, **test_kwargs)
