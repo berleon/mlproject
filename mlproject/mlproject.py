@@ -55,6 +55,7 @@ class MLProject:
         self._run = _run
         self.dataset_factory = self.get_dataset_factory(self.config)
         self.model = self.get_model(self.config)
+        self.prefix = self.config['prefix']
         if model_state:
             self.model.load_state_dict(model_state)
 
@@ -90,8 +91,8 @@ class MLProject:
             self.model_save_dir = model_save_dir
         set_global_writer(self.writer)
 
-    @staticmethod
-    def set_defaults(config):
+    @classmethod
+    def set_defaults(cls, config):
         def maybe_set(name, value):
             if name not in config:
                 config[name] = value
@@ -102,6 +103,7 @@ class MLProject:
         maybe_set('log_iteration_scalars', 1)
         maybe_set('log_iteration_all', 'epoch')
         maybe_set('save_iterations', 'epoch')
+        maybe_set('prefix', cls.__class__.__name__)
         return config
 
     @classmethod
@@ -128,12 +130,10 @@ class MLProject:
     def _is_better(self, score):
         if self.best_score is None:
             return True
-        elif self.model.benchmark_metric() in ['accuracy', 'loss']:
+        if self.model.minimize_benchmark_metric():
             return self.best_score < score
-        elif self.model.benchmark_metric() == 'nll':
-            return self.best_score > score
         else:
-            raise Exception()
+            return self.best_score > score
 
     def test(self):
         # TODO: seperate validation and test
@@ -148,7 +148,8 @@ class MLProject:
 
         # average over batches
         n_test_batches = len(self.dataset_factory.test_loader())
-        for name, loss in test_losses.items(): test_losses[name] = loss/n_test_batches
+        for name, loss in test_losses.items():
+            test_losses[name] = loss/n_test_batches
         # write and print
         loss_info = ", ".join(["{}: {:.4f}".format(name, float(loss))
                                for name, loss in sorted(test_losses.items())])
@@ -226,9 +227,10 @@ class MLProject:
         for batch in progbar:
             self._set_log_level()
             outs = self.model.train_batch(batch)
+            assert not torch.isnan(outs[self.model.benchmark_metric()])
             metrics = {m: outs[m] for m in self.model.metrics() if m in outs}
             if metrics:
-                self.writer.add_scalars(self.model.name() + '/train', metrics, self.global_step)
+                self.writer.add_scalars(self.prefix + '/train', metrics, self.global_step)
             if self._should_save():
                 print('model saved:', self.save())
             if self._should_stop_training():

@@ -14,11 +14,12 @@ class Model(nn.Module):
     implement the `train_batch` and `test_batch` methods.
     """
 
-    def __init__(self, device='cpu'):
+    def __init__(self, device='cpu', name=None):
         super().__init__()
         self._device_args = [device]
         self._device_kwargs = {}
         self.log = LogLevel.SCALARS
+        self._name = name or self.__class__.__name__
 
     def set_device_from_model(self, model):
         """Specific name of the model."""
@@ -30,7 +31,7 @@ class Model(nn.Module):
 
     def name(self):
         """Specific name of the model."""
-        return self.__class__.__name__
+        return self._name
 
     def train_batch(self, batch) -> {}:
         """
@@ -87,6 +88,9 @@ class Model(nn.Module):
     def benchmark_metric(self):
         """Metric to benchmark the model."""
         return 'loss'
+
+    def minimize_benchmark_metric(self):
+        return True
 
     def metrics(self):
         """List of metrics that will be logged."""
