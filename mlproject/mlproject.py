@@ -83,6 +83,7 @@ class MLProject:
             self.writer = DevNullSummaryWriter()
         else:
             self.writer = SummaryWriter(self.tensorboard_run_dir)
+        self.model.set_writer(self.writer)
         if model_save_dir is None:
             self.model_save_dir = get_model_dir(
                 self.config, str(self._id) + '_' + self.model.name())

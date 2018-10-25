@@ -1,5 +1,5 @@
 from torch import nn
-from mlproject.log import LogLevel
+from mlproject.log import LogLevel, DevNullSummaryWriter
 
 
 # TODO: create metric class that know how to compare two models
@@ -20,6 +20,10 @@ class Model(nn.Module):
         self._device_kwargs = {}
         self.log = LogLevel.SCALARS
         self._name = name or self.__class__.__name__
+        self.writer = DevNullSummaryWriter()
+
+    def set_writer(self, writer):
+        self.writer = writer
 
     def set_device_from_model(self, model):
         """Specific name of the model."""
