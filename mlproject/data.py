@@ -117,7 +117,7 @@ class DatasetFactory:
 
     def test_loader(self) -> DataLoader:
         """Return the DataLoader associated with the test set."""
-        return self._train_loader
+        return self._test_loader
 
     def validation_set(self) -> Dataset:
         """Return the validation set."""
