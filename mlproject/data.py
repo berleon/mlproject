@@ -16,19 +16,21 @@ class ClutteredMNIST:
     # TODO: Export dataset
     def __init__(self, dataset, shape=(100, 100), n_clutters=6, clutter_size=8,
                  n_samples=60000, transform=None):
-        """
-        :param init: if True, the parameters are loaded right away (takes some time)
-        """
         self.dataset = dataset
         self.shape = shape
         self.n_clutters = n_clutters
         self.clutter_size = clutter_size
         self.n_samples = n_samples
         self.transform = transform
-        self.parameters = None  # are set on self._init() to save time when they are not needed
+        self._parameters = None  # are set on self._init() to save time when they are not needed
 
-    def _init(self):
-        self.parameters = self.generate_parameters()
+    def get_parameters(self):
+        if self._parameters is None:
+            self._init_parameters()
+        return self._parameters
+
+    def _init_parameters(self):
+        self._parameters = self.generate_parameters()
 
     def export(self, datadir, force_write=False) -> bool:
         """
@@ -41,6 +43,7 @@ class ClutteredMNIST:
         :return: boolean, True if the data was written, False if the data was already there
         """
         # TODO check if files are complete
+        # TODO remove MNIST data after export completion
         # TODO on overwriting, remove all existing files first (prevent leftovers from old dataset)
         abspath = path.abspath(datadir)
         meta = {
@@ -54,7 +57,10 @@ class ClutteredMNIST:
             with open(metapath, mode='rb') as fp:
                 existing_meta = pickle.load(fp)
                 # check if meta is identical
-                for name, item in existing_meta.items():
+                for name, item in meta.items():
+                    if name not in existing_meta:
+                        raise RuntimeError("There is already a dataset stored in this location "
+                                           "and it does not specify the config value {}".format(name))
                     if existing_meta[name] != meta[name]:
                         raise RuntimeError("There is already a dataset stored in this location "
                                            "and the config value {} differs: {} != {}. Please "
@@ -79,6 +85,8 @@ class ClutteredMNIST:
             pil_img.save(path.join(labelpath, str(counters[label])+".png"), format="png")
         self.transform = tmp_transform  # restore transform
         # write meta
+        # add params to meta (we did not want to generate them earlier, in case we didn't need them)
+        meta["params"] = self.get_parameters()
         with open(metapath, 'wb') as fp:
             pickle.dump(meta, fp, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -125,10 +133,10 @@ class ClutteredMNIST:
         return self.n_samples
 
     def __getitem__(self, idx):
-        if self.parameters is None:
-            self._init()
+        if self._parameters is None:
+            self._init_parameters()
         canvas = np.zeros(self.shape, dtype=np.uint8)
-        params = self.parameters[idx]
+        params = self._parameters[idx]
         for clutter in params['clutter']:
             clutter_img = np.array(self.dataset[clutter['clutter_idx']][0])
             h, w = clutter_img.shape
