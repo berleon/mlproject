@@ -107,8 +107,10 @@ class MLProject:
     @classmethod
     def from_run(cls, _run: sacred.run.Run) -> 'MLProject':
         """ Create a MLProject from a scared ``Run``.  """
-        sacred.commands.print_config(_run)
         cfg = _run.config
+        print("Run Config: ")
+        for k in cfg:
+            print("    {}: {}".format(str(k).ljust(10, "."), cfg[k]))
         return cls(cfg, _id=_run._id, _run=_run)
 
     @staticmethod

@@ -69,7 +69,7 @@ class ClutteredMNIST:
             # the files exist and are identical. we can quit.
             return False
 
-        # the files do not yet exists. we will write them
+        # the files do not yet exist. we will write them
         print("ClutteredMNIST: Exporting {} files to {}".format(self.n_samples, abspath))
         # write image files
         tmp_transform = self.transform  # store transform
