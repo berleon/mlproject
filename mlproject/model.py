@@ -10,8 +10,11 @@ class Model(nn.Module):
     This call holds the model (the pytorch layers and weights) but
     also knows how to train the model for a single given batch.
     For simple cases, such as classification you might be able to
-    use the `SimpleModel` class.  When subclassing, you have to
-    implement the `train_batch` and `test_batch` methods.
+    use the ``SimpleModel`` class.  When subclassing, you have to
+    implement the ``train_batch`` and `test_batch` methods.
+
+    The ``MLProject`` class will add a log writer to the model (see
+    ``mlproject.log``). And thus it can log scalars and images.
     """
 
     def __init__(self, device='cpu', name=None):

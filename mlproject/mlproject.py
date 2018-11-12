@@ -7,7 +7,7 @@ import torch
 import random
 from tensorboardX import SummaryWriter
 
-from mlproject.log import get_tensorboard_dir, DevNullSummaryWriter, set_global_writer
+from mlproject.log import get_tensorboard_dir, DevNullSummaryWriter, WriterWithGlobalStep
 from mlproject.utils import to_numpy
 from mlproject.data import DatasetFactory
 from mlproject.model import Model, LogLevel
@@ -23,6 +23,7 @@ def get_model_dir(config, model_identifier):
 
 class TrainingStop(Exception):
     pass
+
 
 class MLProject:
     def __init__(self,
@@ -80,9 +81,11 @@ class MLProject:
         else:
             self.tensorboard_run_dir = tensorboard_run_dir
         if self.tensorboard_run_dir is None:
-            self.writer = DevNullSummaryWriter()
+            writer = DevNullSummaryWriter()
         else:
-            self.writer = SummaryWriter(self.tensorboard_run_dir)
+            writer = SummaryWriter(self.tensorboard_run_dir)
+
+        self.writer = WriterWithGlobalStep(writer)
         self.model.set_writer(self.writer)
         if model_save_dir is None:
             self.model_save_dir = get_model_dir(
@@ -90,7 +93,6 @@ class MLProject:
             os.makedirs(self.model_save_dir)
         else:
             self.model_save_dir = model_save_dir
-        set_global_writer(self.writer)
 
     @classmethod
     def set_defaults(cls, config):
@@ -186,13 +188,15 @@ class MLProject:
             log_iteration_all = len(self.dataset_factory.train_loader())
         if (self.epoch_step + 1) % log_iteration_scalars == 0:
             if (self.epoch_step + 1) % log_iteration_all == 0:
-                self.model.log = LogLevel.ALL
+                log_level = LogLevel.ALL
             else:
-                self.model.log = LogLevel.SCALARS
+                log_level = LogLevel.SCALARS
         elif (self.epoch_step + 1) % log_iteration_all == 0:
-            self.model.log = LogLevel.ALL
+            log_level = LogLevel.ALL
         else:
-            self.model.log = LogLevel.NONE
+            log_level = LogLevel.NONE
+        self.model.log = log_level
+        return log_level
 
     def train(self):
         # TODO: Crtl-C should save the model
@@ -226,18 +230,15 @@ class MLProject:
         self.model.on_epoch_begin(self.epoch)
         self.epoch_step = 0
         for batch in progbar:
-            self._set_log_level()
+            log_level = self._set_log_level()
             outs = self.model.train_batch(batch)
-            assert not torch.isnan(outs[self.model.benchmark_metric()])
-            metrics = {m: outs[m] for m in self.model.metrics() if m in outs}
-            if metrics:
-                self.writer.add_scalars(self.prefix + '/train', metrics, self.global_step)
             if self._should_save():
                 print('model saved:', self.save())
             if self._should_stop_training():
                 raise TrainingStop()
             self.global_step += 1
             self.epoch_step += 1
+            self.writer.set_global_step(self.global_step)
 
         self.model.on_epoch_end(self.epoch)
 
