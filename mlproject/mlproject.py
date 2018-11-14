@@ -55,7 +55,7 @@ class MLProject:
         self._run = _run
         self.dataset_factory = self.get_dataset_factory(self.config)
         self.model = self.get_model(self.config)
-        if model_state:
+        if model_state is not None:
             self.model.load_state_dict(model_state)
 
         if 'device' in self.config:
