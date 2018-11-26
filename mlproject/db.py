@@ -15,7 +15,9 @@ from sacred.observers import MongoObserver
 
 
 def add_mongodb(ex: Experiment):
-    ex.observers.append(MongoObserver.create(url=get_mongodb_ip()))
+    uri = get_mongo_uri()
+    print("Using MongoDB observer: " + uri)
+    ex.observers.append(MongoObserver.create(uri))
 
 
 def add_package_sources(ex: Experiment):
@@ -40,17 +42,21 @@ def load_weights(model, artifact_filename, mode='eval'):
 
 def get_db(database_name='sacred'):
     warnings.warn("This code needs some cleanup. Tell me before you want to use it.")
-    client = MongoClient(host=get_mongodb_ip())
+    client = MongoClient(host=get_mongo_uri())
     db = client.get_database(database_name)
     return db, gridfs.GridFS(db)
 
 
-def get_mongodb_ip(config_dir="~/.config/docker_ports/"):
-    # TODO: use env for mongodb ip
-    config_dir = os.path.expanduser(config_dir)
-    filename = os.path.join(config_dir, "docker_mongodb_ip")
-    with open(filename) as f:
-        return f.read()
+def get_mongo_uri(config_dir="~/.config/docker_ports/"):
+    fill_in_url = "mongodb://mlproject_fill_in_mongodb"
+    uri = os.environ.get("MONGODB_URI", fill_in_url)
+    if uri == fill_in_url:
+        config_dir = os.path.expanduser(config_dir)
+        filename = os.path.join(config_dir, "docker_mongodb_ip")
+        with open(filename) as f:
+            return f.read()
+    else:
+        return uri
 
 
 def get_id(find, sort, database_name='sacred'):
