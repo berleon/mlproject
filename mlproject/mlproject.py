@@ -56,6 +56,7 @@ class MLProject:
         self._run = _run
         self.dataset_factory = self.get_dataset_factory(self.config)
         self.model = self.get_model(self.config)
+
         self.prefix = self.config['prefix']
         if model_state:
             self.model.load_state_dict(model_state)
@@ -112,8 +113,10 @@ class MLProject:
     @classmethod
     def from_run(cls, _run: sacred.run.Run) -> 'MLProject':
         """ Create a MLProject from a scared ``Run``.  """
-        sacred.commands.print_config(_run)
         cfg = _run.config
+        print("Run Config: ")
+        for k in cfg:
+            print("    {}: {}".format(str(k).ljust(10, "."), cfg[k]))
         return cls(cfg, _id=_run._id, _run=_run)
 
     @staticmethod

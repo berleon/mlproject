@@ -6,6 +6,10 @@ import torchvision
 import torch
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
+import os.path as path
+import os
+import errno
+import pickle
 
 
 class ClutteredMNIST:
@@ -18,7 +22,84 @@ class ClutteredMNIST:
         self.clutter_size = clutter_size
         self.n_samples = n_samples
         self.transform = transform
-        self.parameters = self.generate_parameters()
+        self._parameters = None  # are set on self._init() to save time when they are not needed
+
+    def get_parameters(self):
+        if self._parameters is None:
+            self._init_parameters()
+        return self._parameters
+
+    def _init_parameters(self):
+        self._parameters = self.generate_parameters()
+
+    def export(self, datadir, force_write=False) -> bool:
+        """
+        write image files in the file system, which can be loaded with:
+        https://pytorch.org/docs/stable/torchvision/datasets.html#imagefolder
+        or do nothing if they already exist
+        structure: [datadir]/[class idx]/[sample idx].png
+        :param force_write: if True, the files are written, even if they already exist
+        :param datadir: the location for the data
+        :return: boolean, True if the data was written, False if the data was already there
+        """
+        # TODO check if files are complete
+        # TODO remove MNIST data after export completion
+        # TODO on overwriting, remove all existing files first (prevent leftovers from old dataset)
+        abspath = path.abspath(datadir)
+        meta = {
+            "n_samples": self.n_samples,
+            "clutter_size": self.clutter_size,
+            "n_clutters": self.n_clutters,
+        }
+        metapath = path.join(abspath, 'meta.p')
+        if path.exists(metapath) and not force_write:
+            # this seems to be a existing dataset folder. if it is identical, we can reuse it
+            with open(metapath, mode='rb') as fp:
+                existing_meta = pickle.load(fp)
+                # check if meta is identical
+                for name, item in meta.items():
+                    if name not in existing_meta:
+                        raise RuntimeError("There is already a dataset stored in this location "
+                                           "and it does not specify the config value {}".format(name))
+                    if existing_meta[name] != meta[name]:
+                        raise RuntimeError("There is already a dataset stored in this location "
+                                           "and the config value {} differs: {} != {}. Please "
+                                           "remove the files or choose different location."
+                                           "".format(name, existing_meta[name], meta[name]))
+            # the files exist and are identical. we can quit.
+            return False
+
+        # the files do not yet exist. we will write them
+        print("ClutteredMNIST: Exporting {} files to {}".format(self.n_samples, abspath))
+        # write image files
+        tmp_transform = self.transform  # store transform
+        self.transform = None
+        counters = list()
+        for i, (pil_img, label) in enumerate(self):
+            if isinstance(label, torch.Tensor):
+                label = label.detach().cpu().numpy()
+            while len(counters) <= label:
+                counters.append(0)
+            counters[label] += 1
+            labelpath = self.ensure_dir(path.join(abspath, str(label)))
+            pil_img.save(path.join(labelpath, str(counters[label])+".png"), format="png")
+        self.transform = tmp_transform  # restore transform
+        # write meta
+        # add params to meta (we did not want to generate them earlier, in case we didn't need them)
+        meta["params"] = self.get_parameters()
+        with open(metapath, 'wb') as fp:
+            pickle.dump(meta, fp, protocol=pickle.HIGHEST_PROTOCOL)
+
+    @staticmethod
+    def ensure_dir(dirname) -> str:
+        """ check if dir exists, otherwise create it safely or raise error"""
+        try:
+            if not os.path.exists(dirname):
+                os.makedirs(dirname)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
+        return dirname
 
     def generate_parameters(self):
         all_params = []
@@ -52,8 +133,10 @@ class ClutteredMNIST:
         return self.n_samples
 
     def __getitem__(self, idx):
+        if self._parameters is None:
+            self._init_parameters()
         canvas = np.zeros(self.shape, dtype=np.uint8)
-        params = self.parameters[idx]
+        params = self._parameters[idx]
         for clutter in params['clutter']:
             clutter_img = np.array(self.dataset[clutter['clutter_idx']][0])
             h, w = clutter_img.shape
@@ -280,19 +363,38 @@ class MNISTDatasetFactory(TorchvisionDatasetFactory):
 
 class ClutteredMNISTDatasetFactory(TorchvisionDatasetFactory):
     def __init__(self, batch_size=50, train_transform=None, test_transform=None, data_dir=None,
-                 shape=(100, 100), n_clutters=6, clutter_size=8, n_samples=60000,
-                 num_workers=0):
+                 shape=(100, 100), n_clutters=6, clutter_size=8, n_samples_train=60000, n_samples_test=10000, n_samples_val=10000,
+                 num_workers=0, use_filesys=False):
         self.data_dir = default_data_dir(data_dir)
+        # create dataset generators
         trainset = torchvision.datasets.MNIST(root=self.data_dir, train=True, download=True)
         testset = torchvision.datasets.MNIST(root=self.data_dir, train=False, download=True)
-        cluttered_train = ClutteredMNIST(trainset, shape, n_clutters,
-                                         clutter_size, n_samples,
+        generator_train = ClutteredMNIST(trainset, shape, n_clutters,
+                                         clutter_size, n_samples_train,
                                          transform=train_transform)
-        cluttered_test = ClutteredMNIST(testset, shape, n_clutters,
-                                        clutter_size, n_samples,
+        generator_test = ClutteredMNIST(testset, shape, n_clutters,
+                                        clutter_size, n_samples_test,
                                         transform=test_transform)
+        if use_filesys:
+            # export dataset files to data dir
+            train_dir = path.join(data_dir, "train")
+            test_dir = path.join(data_dir, "test")
+            generator_train.export(train_dir)
+            generator_test.export(test_dir)
+
+            # create Torchvision ImageFolder Dataset of these dirs
+            def loader(path) -> Image:
+                return Image.open(path).convert("L")  # force one channel, just like original MNIST
+            resource_train = torchvision.datasets.ImageFolder(train_dir, transform=train_transform, loader=loader)
+            resource_test = torchvision.datasets.ImageFolder(test_dir, transform=test_transform, loader=loader)
+        else:
+            # use just-in-time generation
+            resource_train = generator_train
+            resource_test = generator_test
+
+        # construct parent
         super().__init__(
-            cluttered_train, cluttered_test,
+            resource_train, resource_test,
             data_loader_kwargs={
                 'num_workers': num_workers,
                 'batch_size': batch_size,
