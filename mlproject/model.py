@@ -1,5 +1,5 @@
 from torch import nn
-from mlproject.log import LogLevel
+from mlproject.log import LogLevel, DevNullSummaryWriter
 
 
 # TODO: create metric class that know how to compare two models
@@ -10,15 +10,23 @@ class Model(nn.Module):
     This call holds the model (the pytorch layers and weights) but
     also knows how to train the model for a single given batch.
     For simple cases, such as classification you might be able to
-    use the `SimpleModel` class.  When subclassing, you have to
-    implement the `train_batch` and `test_batch` methods.
+    use the ``SimpleModel`` class.  When subclassing, you have to
+    implement the ``train_batch`` and `test_batch` methods.
+
+    The ``MLProject`` class will add a log writer to the model (see
+    ``mlproject.log``). And thus it can log scalars and images.
     """
 
-    def __init__(self, device='cpu'):
+    def __init__(self, device='cpu', name=None):
         super().__init__()
         self._device_args = [device]
         self._device_kwargs = {}
         self.log = LogLevel.SCALARS
+        self._name = name or self.__class__.__name__
+        self.writer = DevNullSummaryWriter()
+
+    def set_writer(self, writer):
+        self.writer = writer
 
     def set_device_from_model(self, model):
         """Specific name of the model."""
@@ -30,7 +38,7 @@ class Model(nn.Module):
 
     def name(self):
         """Specific name of the model."""
-        return self.__class__.__name__
+        return self._name
 
     def train_batch(self, batch) -> {}:
         """
@@ -87,6 +95,9 @@ class Model(nn.Module):
     def benchmark_metric(self):
         """Metric to benchmark the model."""
         return 'loss'
+
+    def minimize_benchmark_metric(self):
+        return True
 
     def metrics(self):
         """List of metrics that will be logged."""

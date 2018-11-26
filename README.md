@@ -106,6 +106,7 @@ Optional:
   to log it at the end of every epoch. Default: `epoch`
 * `save_iterations`: number of iterations when save the model. Use `epoch` to
   save it at the end of every epoch. Default: `epoch`
+* `prefix`: use this prefix for tensorboard logs and models saves
 
 ## Makefile
 
