@@ -3,17 +3,277 @@ import numpy as np
 import os
 import copy
 import torchvision
+from torchvision.transforms import ToTensor
+from torchvision.datasets.folder import default_loader
 import torch
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 import os.path as path
-import os
 import errno
 import pickle
 
 
-class ClutteredMNIST:
-    # TODO: Export dataset
+class DatasetFactory:
+    """
+    The DatasetFactory provides access to the train/test/val datasets and all the dataset
+    iterators.
+
+    The `Dataset`'s returned by `train_set`, `test_set`, and `validation_set`
+    should be persistent, e.g.  an index should always return the same data and
+    label.
+
+    The `DataLoaders` returned by *_loader can of course return the data
+    augmented and in any order.
+    """
+    def __init__(self,
+                 train_set=None, train_loader=None,
+                 test_set=None, test_loader=None,
+                 validation_set=None, validation_loader=None):
+        self._train_set = train_set
+        self._train_loader = train_loader
+        self._test_set = test_set
+        self._test_loader = test_loader
+        self._validation_set = validation_set
+        self._validation_loader = validation_loader
+
+    def train_set(self) -> Dataset:
+        """Return the train set."""
+        return self._train_set
+
+    def train_loader(self) -> DataLoader:
+        """Return the DataLoader associated with the train set."""
+        return self._train_loader
+
+    def test_set(self) -> Dataset:
+        """Return the test set."""
+        return self._test_set
+
+    def test_loader(self) -> DataLoader:
+        """Return the DataLoader associated with the test set."""
+        return self._test_loader
+
+    def validation_set(self) -> Dataset:
+        """Return the validation set."""
+        return self._validation_set
+
+    def validation_loader(self) -> DataLoader:
+        """Return the DataLoader associated with the validation set."""
+        return self._validation_loader
+
+    def has_train_set(self) -> bool:
+        return self.train_set() is not None
+
+    def has_test_set(self) -> bool:
+        return self.test_set() is not None
+
+    def has_validation_set(self) -> bool:
+        return self.validation_set() is not None
+
+
+class CycleDataLoader(DataLoader):
+    def __init__(self, dataloader, n_cycles=1000):
+        self.dataloader = dataloader
+        self.n_cycles = n_cycles
+
+    def __iter__(self):
+        for _ in range(self.n_cycles):
+            for batch in self.dataloader:
+                yield batch
+
+    def __len__(self):
+        return len(self.dataloader) * self.n_cycles
+
+
+class CycleDatasetFactory(DatasetFactory):
+    def __init__(self, factory: DatasetFactory, n_cycles=1000):
+        def cycle(loader):
+            if loader is None:
+                return None
+            return CycleDataLoader(loader, n_cycles)
+        super().__init__(
+            factory.train_set(),
+            cycle(factory.train_loader()),
+            factory.test_set(),
+            cycle(factory.test_loader()),
+            factory.validation_set(),
+            cycle(factory.validation_loader()),
+        )
+
+
+def default_data_dir(maybe_data_dir=None):
+    if maybe_data_dir is not None:
+        return maybe_data_dir
+    elif "DATA_DIR" in os.environ:
+        return os.environ['DATA_DIR']
+    else:
+        raise ValueError("Can not figure out data_dir. "
+                         "Please set the DATA_DIR enviroment variable.")
+
+
+class TorchvisionDatasetFactory(DatasetFactory):
+    # TODO: Extract more code from subclass
+    def __init__(self, train_set=None, test_set=None, validation_set=None,
+                 data_loader_kwargs={},
+                 data_loader_train_kwargs={},
+                 data_loader_test_kwargs={}):
+        train_kwargs = copy.copy(data_loader_kwargs)
+        train_kwargs.update(data_loader_train_kwargs)
+        test_kwargs = copy.copy(data_loader_kwargs)
+        test_kwargs.update(data_loader_test_kwargs)
+
+        if train_set is not None:
+            trainloader = torch.utils.data.DataLoader(train_set, **train_kwargs)
+        else:
+            trainloader = None
+
+        if test_set is not None:
+            testloader = torch.utils.data.DataLoader(test_set, **test_kwargs)
+        else:
+            testloader = None
+
+        if validation_set is not None:
+            valloader = torch.utils.data.DataLoader(validation_set, **test_kwargs)
+        else:
+            valloader = None
+
+        super().__init__(
+            train_set, trainloader,
+            test_set, testloader,
+            validation_set, valloader,
+        )
+
+
+class CelebALabelList:
+    def __init__(self, filenames, names, labels):
+        self.filenames = filenames
+        self.names = names
+        self.labels = labels
+
+    @staticmethod
+    def load(filename):
+        filename_npz = filename + '.npz'
+        if os.path.exists(filename_npz):
+            with open(filename_npz, 'rb') as f:
+                npz = np.load(f)
+                filenames = npz['filenames'].tolist()
+                names = npz['label_names'].tolist()
+                labels = npz['labels']
+        else:
+            filenames, names, labels = CelebALabelList._load_list(filename)
+            with open(filename_npz, 'wb') as f:
+                np.savez(f, filenames=filenames,
+                         label_names=names,
+                         labels=labels)
+        return CelebALabelList(filenames, names, labels)
+
+    @staticmethod
+    def _load_list(filename):
+        def split(line):
+            collapsed_whitespace = ' '.join(line.rstrip(' \n').split())
+            return collapsed_whitespace.split(' ')
+        with open(filename) as f:
+            lines = f.readlines()
+            print(lines[1])
+            attribute_names = split(lines[1])
+            filenames = []
+            labels = []
+            for line in lines[2:]:
+                values = split(line)
+                filenames.append(values[0])
+                labels.append(list(map(int, values[1:])))
+        return filenames, attribute_names, np.array(labels, np.int32)
+
+    def __getitem__(self, idx):
+        return self.filenames[idx], self.labels[idx]
+
+    def __len__(self):
+        return len(self.filenames)
+
+    def filter(self, func):
+        mask = func(self.labels)
+        return np.nonzero(mask)[0]
+
+
+class CelebA(Dataset):
+    def __init__(self, root_dir, aligned=True, partition='train', transform=ToTensor()):
+        self.aligned = aligned
+        self.transform = transform
+        self.partition = partition
+        if self.aligned:
+            self.image_dir = os.path.join(root_dir, 'img_align_celeba_png')
+        else:
+            self.image_dir = os.path.join(root_dir, 'img_celeba')
+        # identity_CelebA.txt  list_attr_celeba.txt  list_bbox_celeba.txt
+        # list_landmarks_align_celeba.txt  list_landmarks_celeba.txt
+        self.identity_file = os.path.join(root_dir, 'Anno/identity_CelebA.txt')
+        self.identity = CelebALabelList.load(self.identity_file)
+        self.attr_file = os.path.join(root_dir, 'Anno/list_attr_celeba.txt')
+        self.attributes = CelebALabelList.load(self.attr_file)
+        self.bbox_file = os.path.join(root_dir, 'Anno/list_bbox_celeba.txt')
+        self.bbox = CelebALabelList.load(self.bbox_file)
+        self.landmarks_align_file = os.path.join(root_dir, 'Anno/list_landmarks_align_celeba.txt')
+        self.landmarks_file = os.path.join(root_dir, 'Anno/list_landmarks_celeba.txt')
+        if self.aligned:
+            self.landmarks = CelebALabelList.load(self.landmarks_align_file)
+        else:
+            self.landmarks = CelebALabelList.load(self.landmarks_file)
+        self.eval_file = os.path.join(root_dir, 'Eval/list_eval_partition.txt')
+        self.eval_partition = CelebALabelList.load(self.eval_file)
+        self.reset_selection()
+
+    def _filter(self, func, label_list):
+
+        mask = func(label_list.labels[self.selection])
+        self.selection = self.selection[mask]
+
+    def reset_selection(self):
+        label_id = {'train': 0, 'validation': 1, 'test': 2}[self.partition]
+        self.selection = self.eval_partition.filter(lambda x: x[:, 0] == label_id)
+
+    def filter_by_identity(self, func):
+        """``func`` recieves the labels and returns a binary mask """
+        self._filter(func, self.identity)
+
+    def filter_by_landmarks(self, func):
+        """``func`` recieves the labels and returns a binary mask """
+        self._filter(func, self.landmarks)
+
+    def filter_by_attributes(self, func):
+        """``func`` recieves the labels and returns a binary mask """
+        self._filter(func, self.attributes)
+
+    def filter_by_bbox(self, func):
+        """``func`` recieves the labels and returns a binary mask """
+        self._filter(func, self.bbox)
+
+    def __getitem__(self, idx):
+        real_idx = self.selection[idx]
+        filename, _ = self.eval_partition[real_idx]
+        if self.aligned:
+            filename = filename[:-3] + 'png'
+        img = Image.open(os.path.join(self.image_dir, filename))
+        labels = self.attributes[real_idx]
+        return self.transform(img), labels
+
+    def __len__(self):
+        return len(self.selection)
+
+
+class CelebAFactory(TorchvisionDatasetFactory):
+    def __init__(self, root, aligned=True,
+                 train_transform=ToTensor(), test_transform=ToTensor(),
+                 data_loader_kwargs={},
+                 data_loader_train_kwargs={},
+                 data_loader_test_kwargs={}):
+        train_set = CelebA(root, aligned, 'train', train_transform)
+        test_set = CelebA(root, aligned, 'test', test_transform)
+        validation_set = CelebA(root, aligned, 'validation', test_transform)
+        super().__init__(train_set, test_set, validation_set,
+                         data_loader_kwargs, data_loader_train_kwargs,
+                         data_loader_test_kwargs)
+
+
+class ClutteredMNIST(Dataset):
     def __init__(self, dataset, shape=(100, 100), n_clutters=6, clutter_size=8,
                  n_samples=60000, transform=None):
         self.dataset = dataset
@@ -162,135 +422,6 @@ class ClutteredMNIST:
         else:
             return pil_img, label
 
-
-class DatasetFactory:
-    """
-    The DatasetFactory provides access to the train/test/val datasets and all the dataset
-    iterators.
-
-    The `Dataset`'s returned by `train_set`, `test_set`, and `validation_set`
-    should be persistent, e.g.  an index should always return the same data and
-    label.
-
-    The `DataLoaders` returned by *_loader can of course return the data
-    augmented and in any order.
-    """
-    def __init__(self,
-                 train_set=None, train_loader=None,
-                 test_set=None, test_loader=None,
-                 validation_set=None, validation_loader=None):
-        self._train_set = train_set
-        self._train_loader = train_loader
-        self._test_set = test_set
-        self._test_loader = test_loader
-        self._validation_set = validation_set
-        self._validation_loader = validation_loader
-
-    def train_set(self) -> Dataset:
-        """Return the train set."""
-        return self._train_set
-
-    def train_loader(self) -> DataLoader:
-        """Return the DataLoader associated with the train set."""
-        return self._train_loader
-
-    def test_set(self) -> Dataset:
-        """Return the test set."""
-        return self._test_set
-
-    def test_loader(self) -> DataLoader:
-        """Return the DataLoader associated with the test set."""
-        return self._test_loader
-
-    def validation_set(self) -> Dataset:
-        """Return the validation set."""
-        return self._validation_set
-
-    def validation_loader(self) -> DataLoader:
-        """Return the DataLoader associated with the validation set."""
-        return self._validation_loader
-
-    def has_train_set(self) -> bool:
-        return self.train_set() is not None
-
-    def has_test_set(self) -> bool:
-        return self.test_set() is not None
-
-    def has_validation_set(self) -> bool:
-        return self.validation_set() is not None
-
-
-class CycleDataLoader(DataLoader):
-    def __init__(self, dataloader, n_cycles=1000):
-        self.dataloader = dataloader
-        self.n_cycles = n_cycles
-
-    def __iter__(self):
-        for _ in range(self.n_cycles):
-            for batch in self.dataloader:
-                yield batch
-
-    def __len__(self):
-        return len(self.dataloader) * self.n_cycles
-
-
-class CycleDatasetFactory(DatasetFactory):
-    def __init__(self, factory: DatasetFactory, n_cycles=1000):
-        def cycle(loader):
-            if loader is None:
-                return None
-            return CycleDataLoader(loader, n_cycles)
-        super().__init__(
-            factory.train_set(),
-            cycle(factory.train_loader()),
-            factory.test_set(),
-            cycle(factory.test_loader()),
-            factory.validation_set(),
-            cycle(factory.validation_loader()),
-        )
-
-
-def default_data_dir(maybe_data_dir=None):
-    if maybe_data_dir is not None:
-        return maybe_data_dir
-    elif "DATA_DIR" in os.environ:
-        return os.environ['DATA_DIR']
-    else:
-        raise ValueError("Can not figure out data_dir. "
-                         "Please set the DATA_DIR enviroment variable.")
-
-
-class TorchvisionDatasetFactory(DatasetFactory):
-    # TODO: Extract more code from subclass
-    def __init__(self, train_set=None, test_set=None, validation_set=None,
-                 data_loader_kwargs={},
-                 data_loader_train_kwargs={},
-                 data_loader_test_kwargs={}):
-        train_kwargs = copy.copy(data_loader_kwargs)
-        train_kwargs.update(data_loader_train_kwargs)
-        test_kwargs = copy.copy(data_loader_kwargs)
-        test_kwargs.update(data_loader_test_kwargs)
-
-        if train_set is not None:
-            trainloader = torch.utils.data.DataLoader(train_set, **train_kwargs)
-        else:
-            trainloader = None
-
-        if test_set is not None:
-            testloader = torch.utils.data.DataLoader(test_set, **test_kwargs)
-        else:
-            testloader = None
-
-        if validation_set is not None:
-            valloader = torch.utils.data.DataLoader(validation_set, **test_kwargs)
-        else:
-            valloader = None
-
-        super().__init__(
-            train_set, trainloader,
-            test_set, testloader,
-            validation_set, valloader,
-        )
 
 
 class CIFARDatasetFactory(TorchvisionDatasetFactory):
