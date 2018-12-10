@@ -532,3 +532,18 @@ class ClutteredMNISTDatasetFactory(TorchvisionDatasetFactory):
             },
             data_loader_train_kwargs={'shuffle': True}
         )
+
+
+class ImgAug:
+    def __init__(self, transforms):
+        from imgaug import augmenters as iaa
+        self.transform = iaa.Sequential(transforms)
+
+    def __call__(self, img):
+        img = np.array(img)
+        img = self.transform.augment_image(img)
+        if len(img.shape) == 3 and img.shape[-1] == 3:
+            mode = 'RGB'
+        else:
+            mode = 'L'
+        return Image.fromarray(img, mode=mode)
