@@ -195,7 +195,19 @@ class CelebALabelList:
 
 
 class CelebA(Dataset):
-    def __init__(self, root_dir, aligned=True, partition='train', transform=ToTensor()):
+    def __init__(self, root_dir, aligned=True, partition='train', transform=ToTensor(),
+                 labels='attributes'):
+        """
+        CelebA Dataset
+
+        Args:
+            root_dir (str): root directory
+            aligned (bool): whether to use the aligned version (default: True)
+            partition (str): use the ``train``, ``test`` or ``validation`` partion.
+            transform: image transformation to apply
+            labels (str or list): labels to return (default: attributes).
+                Can be ``['bbox', 'landmarks', 'attributes', 'identity']``.
+        """
         self.aligned = aligned
         self.transform = transform
         self.partition = partition
@@ -219,10 +231,10 @@ class CelebA(Dataset):
             self.landmarks = CelebALabelList.load(self.landmarks_file)
         self.eval_file = os.path.join(root_dir, 'Eval/list_eval_partition.txt')
         self.eval_partition = CelebALabelList.load(self.eval_file)
+        self.labels = labels
         self.reset_selection()
 
     def _filter(self, func, label_list):
-
         mask = func(label_list.labels[self.selection])
         self.selection = self.selection[mask]
 
@@ -252,7 +264,14 @@ class CelebA(Dataset):
         if self.aligned:
             filename = filename[:-3] + 'png'
         img = Image.open(os.path.join(self.image_dir, filename))
-        labels = self.attributes[real_idx]
+        if type(self.labels) == list:
+            labels = []
+            for label in self.labels:
+                label_list = getattr(self, label)
+                labels.append(label_list[real_idx])
+        else:
+            label_list = getattr(self, self.labels)
+            labels = label_list[real_idx]
         return self.transform(img), labels
 
     def __len__(self):
@@ -260,14 +279,14 @@ class CelebA(Dataset):
 
 
 class CelebAFactory(TorchvisionDatasetFactory):
-    def __init__(self, root, aligned=True,
+    def __init__(self, root, aligned=True, labels='attributes',
                  train_transform=ToTensor(), test_transform=ToTensor(),
                  data_loader_kwargs={},
                  data_loader_train_kwargs={},
                  data_loader_test_kwargs={}):
-        train_set = CelebA(root, aligned, 'train', train_transform)
-        test_set = CelebA(root, aligned, 'test', test_transform)
-        validation_set = CelebA(root, aligned, 'validation', test_transform)
+        train_set = CelebA(root, aligned, 'train', train_transform, labels)
+        test_set = CelebA(root, aligned, 'test', test_transform, labels)
+        validation_set = CelebA(root, aligned, 'validation', test_transform, labels)
         super().__init__(train_set, test_set, validation_set,
                          data_loader_kwargs, data_loader_train_kwargs,
                          data_loader_test_kwargs)
