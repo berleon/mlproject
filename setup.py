@@ -12,7 +12,6 @@ setup(
         'pillow',
         'torchvision',
         'tensorboardX',
-        'gridfs',
         'pymongo'
     ]
 )

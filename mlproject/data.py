@@ -60,6 +60,12 @@ class DatasetFactory:
         """Return the DataLoader associated with the validation set."""
         return self._validation_loader
 
+    def datasets(self):
+        return self.train_set(), self.test_set(), self.validation_set()
+
+    def dataloaders(self):
+        return self.train_loader(), self.test_loader(), self.validation_loader()
+
     def has_train_set(self) -> bool:
         return self.train_set() is not None
 
