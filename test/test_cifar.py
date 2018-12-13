@@ -1,7 +1,7 @@
 from mlproject.mlproject import MLProject
 from sacred import Experiment
 from mlproject.data import CIFARDatasetFactory
-from mlproject.model import SimpleModel
+from mlproject.trainer import SimpleTrainer
 
 import torch
 import torch.nn as nn
@@ -134,14 +134,18 @@ class CifarProject(MLProject):
 
     @staticmethod
     def get_model(config):
-        net = ResNet18()
-        opt = torch.optim.Adam(net.parameters())
-        return SimpleModel('test_cifar', net, opt, loss=nn.CrossEntropyLoss())
+        return ResNet18()
+
+    @staticmethod
+    def get_trainer(model, config):
+        opt = torch.optim.Adam(model.parameters())
+        return SimpleTrainer(model, opt, loss=nn.CrossEntropyLoss())
 
 
 def test_cifar(tmpdir):
     ex = Experiment()
     ex.add_config({
+        'name': 'test-cifar',
         'batch_size': 5,
         'n_global_iterations':  3,
         'tensorboard_dir': None,
@@ -152,10 +156,8 @@ def test_cifar(tmpdir):
     @ex.automain
     def main(_run):
         proj = CifarProject.from_run(_run)
-        print(proj.model._device_args, proj.model._device_kwargs)
+        print(proj.trainer.device)
         proj.test()
         proj.train()
-        print(proj.model._device_args, proj.model._device_kwargs)
-        proj.test()
 
     ex.run()

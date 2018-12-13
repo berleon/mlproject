@@ -1,7 +1,7 @@
 from mlproject.mlproject import MLProject
 from sacred import Experiment
 from mlproject.data import CIFARDatasetFactory
-from mlproject.model import SimpleModel
+from mlproject.trainer import SimpleTrainer
 from mlproject.log import LogLevel
 
 import torch
@@ -33,11 +33,9 @@ class LinearModel(nn.Module):
         return self.linear(x.view(bs, ch*h*w))
 
 
-class MyModel(SimpleModel):
-    def __init__(self):
-        model = LinearModel()
-        super().__init__(
-            'test', model, torch.optim.SGD(model.parameters(), lr=0.1), nn.CrossEntropyLoss())
+class MyTrainer(SimpleTrainer):
+    def __init__(self, model):
+        super().__init__(model, torch.optim.SGD(model.parameters(), lr=0.1), nn.CrossEntropyLoss())
 
 
 class MyProject(MLProject):
@@ -56,13 +54,18 @@ class MyProject(MLProject):
 
     @staticmethod
     def get_model(config):
-        return MyModel()
+        return LinearModel()
+
+    @staticmethod
+    def get_trainer(model, config):
+        return MyTrainer(model)
 
 
 def test_mlproject_global_iteration(tmpdir):
     N_GLOBAL_ITERATIONS = 3
     ex = Experiment()
     ex.add_config({
+        'name': 'test',
         'batch_size': 5,
         'n_global_iterations':  N_GLOBAL_ITERATIONS,
         'tensorboard_dir': None,
@@ -80,10 +83,10 @@ def test_mlproject_global_iteration(tmpdir):
 
 
 def test_mlproject_log_iterations(tmpdir):
-    # TODO:
     N_GLOBAL_ITERATIONS = 10
     ex = Experiment()
     ex.add_config({
+        'name': 'test',
         'batch_size': 5,
         'n_global_iterations':  N_GLOBAL_ITERATIONS,
         'log_iteration_scalars': 2,
@@ -95,12 +98,10 @@ def test_mlproject_log_iterations(tmpdir):
 
     @ex.automain
     def main(_run):
-        class MyModel(SimpleModel):
-            def __init__(self):
-                model = LinearModel()
-                super().__init__(
-                    'test', model, torch.optim.SGD(model.parameters(), lr=0.1),
-                    nn.CrossEntropyLoss())
+        class MyModel(SimpleTrainer):
+            def __init__(self, model):
+                super().__init__(model, torch.optim.SGD(model.parameters(), lr=0.1),
+                                 nn.CrossEntropyLoss())
 
             def train_batch(self, batch):
                 if proj.epoch_step % proj.config['log_iteration_scalars'] == 0:
@@ -112,7 +113,11 @@ def test_mlproject_log_iterations(tmpdir):
         class TestProject(MyProject):
             @staticmethod
             def get_model(config):
-                return MyModel()
+                return LinearModel()
+
+            @staticmethod
+            def get_trainer(model, config):
+                return MyTrainer(model)
 
         proj = MyProject.from_run(_run)
         proj.train()

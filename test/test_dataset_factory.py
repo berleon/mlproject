@@ -27,7 +27,9 @@ def test_mnist_data_factory():
 def test_cluttered_mnist_data_factory():
     cluttered_mnist = ClutteredMNISTDatasetFactory(
         shape=(100, 100),
-        n_samples=100,
+        n_samples_train=100,
+        n_samples_test=100,
+        n_samples_val=100,
         batch_size=33,
         train_transform=ToTensor(),
         test_transform=ToTensor(),

@@ -4,13 +4,14 @@ from collections import OrderedDict
 import sacred
 from tqdm import tqdm
 import torch
+from torch import nn
 import random
 from tensorboardX import SummaryWriter
 
-from mlproject.log import get_tensorboard_dir, DevNullSummaryWriter, WriterWithGlobalStep
+from mlproject.log import get_tensorboard_dir, DevNullSummaryWriter, WriterWithGlobalStep, LogLevel
 from mlproject.utils import to_numpy
 from mlproject.data import DatasetFactory
-from mlproject.model import Model, LogLevel
+from mlproject.trainer import Trainer
 
 
 def get_model_dir(config, model_identifier):
@@ -36,6 +37,7 @@ class MLProject:
                  model_save_dir=None,
                  tensorboard_run_dir=None,
                  model_state=None,
+                 trainer_state=None,
                  _run=None,
                  ):
         """
@@ -48,6 +50,7 @@ class MLProject:
             model_save_dir (str): The model directory to save it
             tensorboard_run_dir (str): Path to the tensorboard run directory of the model
             model_state (dict): model state_dict for loading weights
+            trainer_state (dict): trainer state_dict
             _run (sacred.Run): current sacred run (optional)
         """
         # TODO: set default config
@@ -56,10 +59,13 @@ class MLProject:
         self._run = _run
         self.dataset_factory = self.get_dataset_factory(self.config)
         self.model = self.get_model(self.config)
-
+        self.trainer = self.get_trainer(self.model, self.config)
         self.prefix = self.config['prefix']
         if model_state:
             self.model.load_state_dict(model_state)
+
+        if trainer_state:
+            self.trainer.load_state_dict(trainer_state)
 
         if 'device' in self.config:
             device_name = self.config['device']
@@ -70,7 +76,7 @@ class MLProject:
                 device_name = 'cpu'
 
         self.device = torch.device(device_name)
-        self.model.to(self.device)
+        self.trainer.to(self.device)
 
         self.global_step = global_step
         self.epoch = epoch
@@ -78,7 +84,7 @@ class MLProject:
         self.best_score = best_score
         if tensorboard_run_dir is None and self.config.get('tensorboard_dir', None):
             self.tensorboard_run_dir = get_tensorboard_dir(
-                str(self._id) + '_' + self.model.name())
+                str(self._id) + '_' + self.name())
         else:
             self.tensorboard_run_dir = tensorboard_run_dir
         if self.tensorboard_run_dir is None:
@@ -87,10 +93,10 @@ class MLProject:
             writer = SummaryWriter(self.tensorboard_run_dir)
 
         self.writer = WriterWithGlobalStep(writer)
-        self.model.set_writer(self.writer)
+        self.trainer.set_writer(self.writer)
         if model_save_dir is None:
             self.model_save_dir = get_model_dir(
-                self.config, str(self._id) + '_' + self.model.name())
+                self.config, str(self._id) + '_' + self.name())
             os.makedirs(self.model_save_dir)
         else:
             self.model_save_dir = model_save_dir
@@ -120,10 +126,15 @@ class MLProject:
         return cls(cfg, _id=_run._id, _run=_run)
 
     @staticmethod
-    def get_model(config) -> Model:
+    def get_model(config) -> nn.Module:
         """
-        Build a `mlproject.Model` for the given config.
+        Builds the model for the given config.
         """
+        raise NotImplementedError()
+
+    @staticmethod
+    def get_trainer(model, config) -> nn.Module:
+        """Builds a `mlproject.Trainer` for the given the model and config."""
         raise NotImplementedError()
 
     @staticmethod
@@ -133,20 +144,43 @@ class MLProject:
         """
         raise NotImplementedError()
 
+    def name(self):
+        if hasattr(self.model, 'name'):
+            if hasattr(self.model.name, '__call__'):
+                return self.model.name()
+            else:
+                return self.model.name
+        if 'name' in self.config:
+            return self.config['name']
+        raise ValueError("no name set!")
+
     def _is_better(self, score):
         if self.best_score is None:
             return True
-        if self.model.minimize_benchmark_metric():
+        if self.trainer.minimize_benchmark_metric():
             return self.best_score < score
         else:
             return self.best_score > score
 
-    def test(self):
+    def test(self, partition='test'):
         # TODO: seperate validation and test
         self.model.eval()
         test_losses = OrderedDict()
-        for batch in self.dataset_factory.test_loader():
-            losses = self.model.test_batch(batch)
+        if partition == 'test':
+            loader = self.dataset_factory.test_loader()
+        elif partition == 'validation':
+            loader = self.dataset_factory.validation_loader()
+        else:
+            raise Exception()
+
+        first_batch = True
+        for batch in loader:
+            if first_batch:
+                self.trainer.log = LogLevel.ALL
+                first_batch = False
+            else:
+                self.trainer.log = LogLevel.NONE
+            losses = self.trainer.test_batch(batch)
             for name, value in losses.items():
                 if name not in test_losses:
                     test_losses[name] = 0
@@ -159,9 +193,9 @@ class MLProject:
         # write and print
         loss_info = ", ".join(["{}: {:.4f}".format(name, float(loss))
                                for name, loss in sorted(test_losses.items())])
-        self.writer.add_scalars(self.model.name() + '/test', test_losses, self.global_step)
+        self.writer.add_scalars(self.name() + '/test', test_losses, self.global_step)
         print("[TEST] " + loss_info)
-        return test_losses[self.model.benchmark_metric()]
+        return test_losses[self.trainer.benchmark_metric()]
 
     def _should_save(self):
         save_iterations = self.config['save_iterations']
@@ -198,12 +232,13 @@ class MLProject:
             log_level = LogLevel.ALL
         else:
             log_level = LogLevel.NONE
-        self.model.log = log_level
+
+        self.trainer.log = log_level
         return log_level
 
     def train(self):
         # TODO: Crtl-C should save the model
-        self.model.on_train_begin()
+        self.trainer.on_train_begin()
         self.model.train()
         best_model_fname = None
 
@@ -222,7 +257,7 @@ class MLProject:
         if best_model_fname is not None:
             if self._run is not None:
                 self._run.add_artifact(best_model_fname)
-        self.model.on_train_end()
+        self.trainer.on_train_end()
 
     def train_epoch(self):
         if self._should_stop_training():
@@ -230,11 +265,11 @@ class MLProject:
         train_loader = self.dataset_factory.train_loader()
         progbar = tqdm(train_loader, ascii=True,
                        total=self._iterations_left(len(train_loader)))
-        self.model.on_epoch_begin(self.epoch)
+        self.trainer.on_epoch_begin(self.epoch)
         self.epoch_step = 0
         for batch in progbar:
-            log_level = self._set_log_level()
-            outs = self.model.train_batch(batch)
+            self._set_log_level()
+            self.trainer.train_batch(batch)
             if self._should_save():
                 print('model saved:', self.save())
             if self._should_stop_training():
@@ -243,7 +278,7 @@ class MLProject:
             self.epoch_step += 1
             self.writer.set_global_step(self.global_step)
 
-        self.model.on_epoch_end(self.epoch)
+        self.trainer.on_epoch_end(self.epoch)
 
     def state_dict(self):
         return {
@@ -256,12 +291,13 @@ class MLProject:
             'model_save_dir': self.model_save_dir,
             'tensorboard_run_dir': self.tensorboard_run_dir,
             'model_state': self.model.state_dict(),
+            'trainer_state': self.trainer.state_dict(),
         }
 
     def save_filename(self):
         return os.path.abspath(os.path.join(
             self.model_save_dir,
-            "{}_e{:05}_b{:05}.torch".format(self.model.name(), self.epoch, self.epoch_step)))
+            "{}_e{:05}_b{:05}.torch".format(self.name(), self.epoch, self.epoch_step)))
 
     def save(self):
         torch.save(self.state_dict(), self.save_filename())

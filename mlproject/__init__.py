@@ -1,4 +1,4 @@
 # flake8: noqa
 from mlproject.mlproject import MLProject
-from mlproject.model import Model
+from mlproject.trainer import Trainer, SimpleTrainer
 from mlproject.data import DatasetFactory

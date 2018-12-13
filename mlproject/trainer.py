@@ -1,29 +1,26 @@
-from torch import nn
+import torch
 from mlproject.log import LogLevel, DevNullSummaryWriter
 
 
-# TODO: create metric class that know how to compare two models
-
-
-class Model(nn.Module):
+class Trainer:
     """
     This call holds the model (the pytorch layers and weights) but
     also knows how to train the model for a single given batch.
     For simple cases, such as classification you might be able to
-    use the ``SimpleModel`` class.  When subclassing, you have to
+    use the ``SimpleTrainer`` class.  When subclassing, you have to
     implement the ``train_batch`` and `test_batch` methods.
 
     The ``MLProject`` class will add a log writer to the model (see
     ``mlproject.log``). And thus it can log scalars and images.
     """
 
-    def __init__(self, device='cpu', name=None):
+    def __init__(self, model, writer=None, device='cpu'):
         super().__init__()
+        self.model = model
         self._device_args = [device]
         self._device_kwargs = {}
         self.log = LogLevel.SCALARS
-        self._name = name or self.__class__.__name__
-        self.writer = DevNullSummaryWriter()
+        self.writer = writer or DevNullSummaryWriter()
 
     def set_writer(self, writer):
         self.writer = writer
@@ -35,10 +32,6 @@ class Model(nn.Module):
             'device': list(model.parameters())[0].device,
             'dtype': list(model.parameters())[0].type(),
         }
-
-    def name(self):
-        """Specific name of the model."""
-        return self._name
 
     def train_batch(self, batch) -> {}:
         """
@@ -103,10 +96,14 @@ class Model(nn.Module):
         """List of metrics that will be logged."""
         return ['loss']
 
+    @property
+    def device(self):
+        return torch.device(*self._device_args, **self._device_kwargs)
+
     def to(self, *args, **kwargs):
         self._device_args = args
         self._device_kwargs = kwargs
-        super().to(*args, **kwargs)
+        self.model.to(*args, **kwargs)
 
     def to_device(self, batch):
         """Moves batch to the same device of the model."""
@@ -115,31 +112,30 @@ class Model(nn.Module):
         else:
             return batch.to(*self._device_args, **self._device_kwargs)
 
+    def state_dict(self):
+        raise NotImplementedError()
 
-class SimpleModel(Model):
+
+class SimpleTrainer(Trainer):
     """
     For simple models, you can use this class. Given a model,
     optimizer and a loss layer, this class puts them together in
     a straight way.
     """
 
-    def __init__(self, name, model, optimizer, loss, device='cpu'):
+    def __init__(self, model, optimizer: torch.optim.Optimizer, loss, device='cpu',
+                 optimizer_state=None):
         super().__init__(device)
         self.model = model
-        self._name = name
         self.optimizer = optimizer
+        if optimizer_state is not None:
+            self.optimizer.load_state_dict(optimizer_state)
         self.loss = loss
-
-    def name(self):
-        return self._name
-
-    def forward(self, *args, **kwargs):
-        return self.model(*args, **kwargs)
 
     def train_batch(self, batch):
         input, labels = self.to_device(batch)
         self.optimizer.zero_grad()
-        output = self(input)
+        output = self.model(input)
         loss = self.loss(output, labels)
         loss.backward()
         self.optimizer.step()
@@ -147,5 +143,11 @@ class SimpleModel(Model):
 
     def test_batch(self, batch):
         input, labels = self.to_device(batch)
-        output = self(input)
+        output = self.model(input)
         return {'loss': self.loss(output, labels)}
+
+    def state_dict(self):
+        return {'optimizer_state': self.optimizer.state_dict()}
+
+    def load_state_dict(self, state_dict):
+        self.optimizer.load_state_dict(state_dict['optimizer_state'])
